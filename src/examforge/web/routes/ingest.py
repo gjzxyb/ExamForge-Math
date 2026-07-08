@@ -42,13 +42,29 @@ async def submit(
         source=source, repo=p_repo,
     )
     r = run_pipeline(p, session=s, llm=llm, embedder=embedder, config=cfg)
+    backend = getattr(llm, "effective_backend", "unknown")
     msg = (
         f"题目 #{p.id} 已处理: "
         f"confirmed={len(r.confirmed)} · "
         f"suspicions={len(r.suspicions)} · "
-        f"candidates_new={len(r.candidates_new)}"
+        f"candidates_new={len(r.candidates_new)} · "
+        f"LLM=[{r.llm_backend_used}]"
     )
+    extra_warning = ""
+    if r.llm_error:
+        extra_warning = (
+            f"⚠ LLM 真实 API 调用失败,已降级为 mock。<br>"
+            f"<small>错误:{r.llm_error[:300]}</small><br>"
+            f"<small>请到 <a href=\"/settings\">设置</a> 修正后重新提交。</small>"
+        )
+    elif r.llm_backend_used == "mock":
+        extra_warning = (
+            "ℹ 当前 LLM 后端为 <b>mock</b>(测试占位),未调用真实 API。<br>"
+            "<small>要在 ingest 时调用 DeepSeek 分析,请到 "
+            "<a href=\"/settings\">设置</a> 填入 API key 并把后端切到 http。</small>"
+        )
     return templates.TemplateResponse(request, "ingest.html", {
         "areas": [a.value for a in SubjectArea],
         "message": msg,
+        "extra_warning": extra_warning,
     })

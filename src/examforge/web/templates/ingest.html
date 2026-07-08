@@ -3,6 +3,7 @@
 {% block body %}
 <h1>录入新题</h1>
 {% if message %}<div class="flag-confirmed">{{ message }}</div>{% endif %}
+{% if extra_warning %}<div class="flag-suspicious">{{ extra_warning|safe }}</div>{% endif %}
 <form method="post" action="/ingest">
   <p><label>年份 <input name="year" type="number" required value="2024"></label></p>
   <p><label>地区 <input name="region" required value="全国甲卷"></label></p>

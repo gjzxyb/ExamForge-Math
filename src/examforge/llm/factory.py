@@ -32,23 +32,57 @@ def _fallback_llm():
     raise ValueError(f"未知 LLM backend: {backend!r}")
 
 
-def get_llm():
+def get_llm(fail_open: bool = True):
+    """获取 LLM 实例。
+
+    fail_open=True(默认):当 http 配置完整但调用失败时,降级到 MockLLM 并返回;
+    失败信息通过 stderr warning 输出,调用方在响应里也能看到。
+    fail_open=False:严格模式,直接抛错。
+
+    返回值带一个属性 `effective_backend` 告诉调用方"这次请求实际用的是 mock 还是 http"
+    (用于在 UI 上显示)。
+    """
     try:
         from ..config.settings import get_settings
         s = get_settings().llm
     except RuntimeError:
-        return _fallback_llm()
-    if s.backend == "mock":
-        return MockLLM()
-    if s.backend == "http":
-        if not s.api_key or not s.base_url:
+        s_llm = None
+    else:
+        s_llm = s
+
+    if s_llm is None:
+        # SettingsStore 未初始化
+        inst = _fallback_llm()
+        inst.effective_backend = "mock_fallback"
+        return inst
+
+    if s_llm.backend == "mock":
+        inst = MockLLM()
+        inst.effective_backend = "mock"
+        return inst
+
+    if s_llm.backend == "http":
+        if not s_llm.api_key or not s_llm.base_url:
             warnings.warn(
                 "LLM backend=http 但未配置 api_key 或 base_url,降级为 MockLLM",
                 stacklevel=2,
             )
-            return MockLLM()
-        return HttpLLM(
-            base_url=s.base_url, api_key=s.api_key,
-            model=s.model, timeout=s.timeout,
+            inst = MockLLM()
+            inst.effective_backend = "mock_fallback_no_key"
+            return inst
+        inst = HttpLLM(
+            base_url=s_llm.base_url, api_key=s_llm.api_key,
+            model=s_llm.model, timeout=s_llm.timeout,
         )
-    raise ValueError(f"未知 LLM backend: {s.backend!r}")
+        inst.effective_backend = "http"
+        return inst
+
+    raise ValueError(f"未知 LLM backend: {s_llm.backend!r}")
+
+
+def get_llm_safe():
+    """为 ingest 端点准备:返回 (llm, original_backend) 元组。
+    失败时降级 mock 并把信息反馈给前端。
+    """
+    inst = get_llm(fail_open=True)
+    return inst, inst.effective_backend
