@@ -1,0 +1,44 @@
+[
+  {
+    "id": "g1",
+    "year": 2023,
+    "subject_area": "导数",
+    "expected_methods": [
+      "分离参数法"
+    ],
+    "expected_classification": "auto_confirm",
+    "confirmed": [
+      1
+    ],
+    "suspicions": [],
+    "candidates_new": []
+  },
+  {
+    "id": "g2",
+    "year": 2022,
+    "subject_area": "圆锥曲线",
+    "expected_methods": [
+      "设而不求联立"
+    ],
+    "expected_classification": "auto_confirm",
+    "confirmed": [],
+    "suspicions": [
+      2
+    ],
+    "candidates_new": []
+  },
+  {
+    "id": "g3",
+    "year": 2024,
+    "subject_area": "导数",
+    "expected_methods": [
+      "构造函数比较"
+    ],
+    "expected_classification": "auto_confirm",
+    "confirmed": [
+      3
+    ],
+    "suspicions": [],
+    "candidates_new": []
+  }
+]

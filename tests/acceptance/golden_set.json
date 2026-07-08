@@ -1,0 +1,32 @@
+[
+  {
+    "id": "g1",
+    "year": 2023,
+    "region": "全国甲卷",
+    "subject_area": "导数",
+    "stem_latex": "设函数 f(x)=x^3-3x, 若对任意实数 x, f(x)≥-a 恒成立, 求 a 的最大值。",
+    "reference_solution": "a=2。 令 g(x)=x^3-3x, g'(x)=3x^2-3=0=>x=±1; 最小值 g(-1)=2, 故 a≤2。",
+    "expected_methods": ["分离参数法"],
+    "expected_classification": "auto_confirm"
+  },
+  {
+    "id": "g2",
+    "year": 2022,
+    "region": "全国乙卷",
+    "subject_area": "圆锥曲线",
+    "stem_latex": "已知椭圆 C: x^2/4+y^2=1, 过点 (1,1) 的直线 l 与 C 交于 A,B 两点, 求 AB 中点轨迹。",
+    "reference_solution": "设 A(x1,y1),B(x2,y2),联立用韦达,得 (x1+x2,y1+y2) 与斜率关系。",
+    "expected_methods": ["设而不求联立"],
+    "expected_classification": "auto_confirm"
+  },
+  {
+    "id": "g3",
+    "year": 2024,
+    "region": "新课标 II",
+    "subject_area": "导数",
+    "stem_latex": "已知 a>0, 证明 e^x ≥ 1 + x + x^2/2 (x≥0)。",
+    "reference_solution": "构造函数 f(x)=e^x - 1 - x - x^2/2, f(0)=0, f'(x)=e^x-1-x, f''(x)=e^x-1≥0, 故 f' 增,f'(0)=0, 故 f'(x)≥0, 故 f 增, f(x)≥0。",
+    "expected_methods": ["构造函数比较"],
+    "expected_classification": "auto_confirm"
+  }
+]
