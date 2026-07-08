@@ -8,7 +8,7 @@
 <p>下表是"可疑"的解法实例(LLM 输出的方法名/板块不在 taxonomy、或置信度过低、或一题方法数过多)。
 你可以:确认(挂到当前 method)/ 拒绝(丢弃)/ 改归并到另一 method。</p>
 {% for it in items %}
-<div class="flag-suspicious">
+<div class="flag-suspicious" data-si-id="{{ it.si.id }}">
   <p>
     <b>SI #{{ it.si.id }}</b> ·
     题 #{{ it.problem.id }} · {{ it.problem.year }} {{ it.problem.region }} · 板块 {{ it.problem.subject_area.value }}
@@ -59,12 +59,63 @@
       <input name="note" placeholder="拒绝原因" style="width:30em">
       <button>✗ 拒绝</button>
     </form>
+  </p>
+
+  <p>
+    <b>改归并到:</b>
+    <select class="method-picker" data-si-id="{{ it.si.id }}" style="min-width:24em">
+      <option value="">-- 选择方法 --</option>
+    </select>
+    <small class="method-picker-status" style="margin-left:0.5em;color:#888">(加载中…)</small>
     <form method="post" action="/review/{{ it.si.id }}/revise" style="display:inline">
-      <input name="method_id" type="number" placeholder="改到 method_id" required style="width:10em">
+      <input name="method_id" type="number" class="method-id-input" data-si-id="{{ it.si.id }}" required placeholder="method_id" style="width:8em">
       <button>↻ 改归并</button>
     </form>
   </p>
 </div>
 {% endfor %}
+
+<script>
+(async function() {
+  const pickers = document.querySelectorAll('.method-picker');
+  const statusEls = document.querySelectorAll('.method-picker-status');
+  const inputs = document.querySelectorAll('.method-id-input');
+  try {
+    const r = await fetch('/review/methods.json');
+    const methods = await r.json();
+    // 按 (subject_area, status, name) 排序,可读性更好
+    const statusOrder = { seed: 0, candidate: 1, confirmed: 2 };
+    methods.sort((a, b) =>
+      a.subject_area.localeCompare(b.subject_area, 'zh') ||
+      (statusOrder[a.status] - statusOrder[b.status]) ||
+      a.name.localeCompare(b.name, 'zh')
+    );
+    pickers.forEach((p, i) => {
+      // 按板块分组显示
+      let lastArea = null;
+      methods.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        if (m.subject_area !== lastArea) {
+          opt.textContent = `[${m.subject_area}] ${m.name}  (#${m.id}, ${m.status})`;
+          lastArea = m.subject_area;
+        } else {
+          opt.textContent = `  ${m.name}  (#${m.id}, ${m.status})`;
+        }
+        p.appendChild(opt);
+      });
+      // 选择时同步填 input
+      p.addEventListener('change', () => {
+        const siId = p.dataset.siId;
+        const inp = document.querySelector('.method-id-input[data-si-id="' + siId + '"]');
+        if (inp) inp.value = p.value;
+      });
+    });
+    statusEls.forEach(s => { s.textContent = `(${methods.length} 个方法可选)`; s.style.color = '#198754'; });
+  } catch (e) {
+    statusEls.forEach(s => { s.textContent = '(加载方法列表失败:' + e + ')'; s.style.color = '#dc3545'; });
+  }
+})();
+</script>
 {% endif %}
 {% endblock %}

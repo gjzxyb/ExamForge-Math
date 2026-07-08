@@ -1,12 +1,14 @@
-"""审核队列路由:GET 列表 + 三个 POST 动作端点。"""
+"""审核队列路由:GET 列表 + 三个 POST 动作端点 + JSON 辅助。"""
 
+import json
 from fastapi import APIRouter, Request, Form, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlmodel import Session
+from sqlalchemy import select
 
 from ..deps import get_session_dep, solution_repo_dep, method_repo_dep, problem_repo_dep
 from ..app import templates
-from ...models import SolutionInstance, ReviewStatus, Problem
+from ...models import SolutionInstance, ReviewStatus, Problem, Method
 from ...pipeline.review import (
     confirm as pipeline_confirm,
     reject as pipeline_reject,
@@ -84,3 +86,21 @@ async def do_revise(
 ):
     pipeline_revise(si_id, method_id=method_id, solution_repo=s_repo)
     return RedirectResponse("/review", status_code=303)
+
+
+@router.get("/review/methods.json")
+async def list_methods_json(
+    request: Request,
+    s: Session = Depends(get_session_dep),
+):
+    """返回所有方法(confirmed + seed + candidate),供审核页面 JS 用名字挑选。"""
+    methods = list(s.execute(select(Method)).scalars().all())
+    return JSONResponse([
+        {
+            "id": m.id,
+            "name": m.name,
+            "status": m.status.value,
+            "subject_area": m.subject_area.value,
+        }
+        for m in methods
+    ])
