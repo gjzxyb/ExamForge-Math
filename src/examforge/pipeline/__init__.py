@@ -7,6 +7,7 @@ from .classify import classify, ClassifyResult
 from .review import (
     is_suspicious, confirm, reject, revise_method, auto_confirm_if_clean,
 )
+from .commit import commit_solution
 
 __all__ = [
     "PipelineError", "IngestValidationError", "LLMSchemaError", "NotInReviewQueue",
@@ -14,4 +15,5 @@ __all__ = [
     "extract", "TaxonomyProvider",
     "classify", "ClassifyResult",
     "is_suspicious", "confirm", "reject", "revise_method", "auto_confirm_if_clean",
+    "commit_solution",
 ]
