@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}设置 · ExamForge{% endblock %}
+{% block body %}
+<h1>系统设置</h1>
+<p style="color:#666">所有配置修改后立即生效(下次 LLM/Embedder 调用即读到新值),并持久化到 <code>data/settings.json</code>。
+环境变量仍可作为启动初始值。</p>
+
+{% if saved %}
+<div class="flag-confirmed">已保存 <b>{{ saved }}</b> 区块。</div>
+{% endif %}
+
+<!-- ============ LLM ============ -->
+<h2>语言模型(LLM)</h2>
+<form id="form-llm" method="post" action="/settings/llm">
+  <p>
+    <label>后端
+      <select name="backend">
+        <option value="mock" {% if s.llm.backend == "mock" %}selected{% endif %}>mock(测试用)</option>
+        <option value="http" {% if s.llm.backend == "http" %}selected{% endif %}>http(真实 API)</option>
+      </select>
+    </label>
+  </p>
+  <p><label>Base URL <input name="base_url" value="{{ s.llm.base_url }}"></label></p>
+  <p><label>API Key <input name="api_key" type="password" value="{{ s.llm.api_key }}"></label></p>
+  <p><label>Model <input name="model" value="{{ s.llm.model }}"></label></p>
+  <p><label>Timeout(秒) <input name="timeout" type="number" step="0.1" value="{{ s.llm.timeout }}"></label></p>
+  <button>保存 LLM</button>
+  <button type="button" onclick="testConn('llm', '/settings/test-llm', 'llm-test-result')">测试连接</button>
+  <span id="llm-test-result" style="margin-left:1em"></span>
+</form>
+
+<hr>
+
+<!-- ============ Embedder ============ -->
+<h2>嵌入模型(Embedder)</h2>
+<form id="form-embedder" method="post" action="/settings/embedder">
+  <p>
+    <label>后端
+      <select name="backend">
+        <option value="mock" {% if s.embedder.backend == "mock" %}selected{% endif %}>mock</option>
+        <option value="http" {% if s.embedder.backend == "http" %}selected{% endif %}>http</option>
+      </select>
+    </label>
+  </p>
+  <p><label>Base URL <input name="base_url" value="{{ s.embedder.base_url }}"></label></p>
+  <p><label>API Key <input name="api_key" type="password" value="{{ s.embedder.api_key }}"></label></p>
+  <p><label>Model <input name="model" value="{{ s.embedder.model }}"></label></p>
+  <p><label>维度 <input name="dim" type="number" value="{{ s.embedder.dim }}"></label></p>
+  <p><label>Timeout(秒) <input name="timeout" type="number" step="0.1" value="{{ s.embedder.timeout }}"></label></p>
+  <button>保存 Embedder</button>
+  <button type="button" onclick="testConn('embedder', '/settings/test-embedder', 'embedder-test-result')">测试连接</button>
+  <span id="embedder-test-result" style="margin-left:1em"></span>
+</form>
+
+<hr>
+
+<!-- ============ OCR (占位) ============ -->
+<h2>公式识别(OCR) <small style="color:#888;font-size:0.7em">— 未来功能,目前只存配置不接实现</small></h2>
+<form id="form-ocr" method="post" action="/settings/ocr">
+  <p>
+    <label>Provider
+      <select name="provider">
+        <option value="none" {% if s.ocr.provider == "none" %}selected{% endif %}>none(未启用)</option>
+        <option value="tencent" {% if s.ocr.provider == "tencent" %}selected{% endif %}>tencent(腾讯云)</option>
+        <option value="aliyun" {% if s.ocr.provider == "aliyun" %}selected{% endif %}>aliyun(阿里云)</option>
+      </select>
+    </label>
+  </p>
+  <p><label>Access Key ID <input name="access_key_id" value="{{ s.ocr.access_key_id }}"></label></p>
+  <p><label>Access Key Secret <input name="access_key_secret" type="password" value="{{ s.ocr.access_key_secret }}"></label></p>
+  <p><label>Region <input name="region" value="{{ s.ocr.region }}"></label></p>
+  <p><label>Endpoint <input name="endpoint" value="{{ s.ocr.endpoint }}"></label></p>
+  <button>保存 OCR</button>
+</form>
+
+<script>
+function testConn(label, url, resultId) {
+  var el = document.getElementById(resultId);
+  el.textContent = "测试中…";
+  el.style.color = "#888";
+  fetch(url, { method: "POST" })
+    .then(r => r.json().then(j => ({ status: r.status, body: j })))
+    .then(({ status, body }) => {
+      if (body.ok) {
+        el.textContent = "✓ OK · backend=" + body.backend
+          + (body.dim ? " · dim=" + body.dim : "")
+          + (body.method_count !== undefined ? " · methods=" + body.method_count : "");
+        el.style.color = "#198754";
+      } else {
+        el.textContent = "✗ " + (body.error || "unknown");
+        el.style.color = "#dc3545";
+      }
+    })
+    .catch(err => {
+      el.textContent = "✗ " + err;
+      el.style.color = "#dc3545";
+    });
+}
+</script>
+{% endblock %}

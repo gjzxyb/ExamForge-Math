@@ -43,6 +43,16 @@ uv run uvicorn examforge.web:create_app --factory --host 127.0.0.1 --port 8000 -
 | `GET /report` | 教师报告(基于 confirmed 方法 + 例题) |
 | `GET /qa` | 学生问答表单 |
 | `POST /qa` | 提交问题,基于方法库 RAG 回答 |
+| `GET /settings` | 系统设置(LLM / Embedder / OCR 凭据,运行时改写) |
+| `POST /settings/llm` | 保存 LLM 配置 |
+| `POST /settings/embedder` | 保存 Embedder 配置 |
+| `POST /settings/ocr` | 保存 OCR 配置(占位) |
+| `POST /settings/test-llm` | 测试当前 LLM 是否可用 |
+| `POST /settings/test-embedder` | 测试当前 Embedder 是否可用 |
+
+**运行时配置**:打开 `http://127.0.0.1:8000/settings` 填入 DeepSeek key 等,
+保存后立即生效(下次 LLM/Embedder 调用即读到新值),
+并持久化到 `data/settings.json`。环境变量仍可作为启动初始值。
 
 ## 测试
 

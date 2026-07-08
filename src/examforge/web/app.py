@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func
 
 from ..models import Problem, Method, SolutionInstance, MethodStatus, ReviewStatus
+from ..config.settings import init_settings_store
 from .deps import ensure_init, get_session_dep, get_session
 
 
@@ -39,9 +40,11 @@ def _stats() -> dict:
 
 def create_app(data_dir: Path) -> FastAPI:
     ensure_init(data_dir)
+    init_settings_store(data_dir)  # 加载持久化设置
     app = FastAPI(title="ExamForge-Math")
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
     app.state.data_dir = data_dir
+    app.state.templates = templates
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
@@ -52,12 +55,13 @@ def create_app(data_dir: Path) -> FastAPI:
     def healthz():
         return {"ok": True}
 
-    # 路由在后续 task 注册
-    from .routes import ingest, methods as methods_route, review, report, qa
+    # 路由
+    from .routes import ingest, methods as methods_route, review, report, qa, settings as settings_route
     app.include_router(ingest.router)
     app.include_router(methods_route.router)
     app.include_router(review.router)
     app.include_router(report.router)
     app.include_router(qa.router)
+    app.include_router(settings_route.router)
 
     return app

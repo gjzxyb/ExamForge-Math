@@ -13,9 +13,16 @@ class PipelineConfig:
     max_methods_per_problem: int = 3
     # 自动确认最低置信度
     auto_confirm_min_confidence: float = 0.7
-    # 后端选择
-    embed_backend: str = os.environ.get("EXAMFORGE_EMBED_BACKEND", "mock")
-    llm_backend: str = os.environ.get("EXAMFORGE_LLM_BACKEND", "mock")
+
+    @property
+    def embed_backend(self) -> str:
+        from .settings import get_settings
+        return get_settings().embedder.backend
+
+    @property
+    def llm_backend(self) -> str:
+        from .settings import get_settings
+        return get_settings().llm.backend
 
 
 def get_config() -> PipelineConfig:
