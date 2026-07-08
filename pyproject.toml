@@ -5,10 +5,13 @@ description = "从历年高考压轴题提炼结构化解题方法库"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "chromadb>=1.5.9",
     "httpx>=0.27",
     "pydantic>=2.7",
+    "pyyaml>=6",
     "rich>=13",
     "sqlmodel>=0.0.22",
+    "tenacity>=8",
     "typer>=0.12",
 ]
 
