@@ -41,8 +41,20 @@ def classify(
     """对单条 draft 决策应归到哪个 Method/或创建候选/或可疑。"""
     item = ProposedMethodUse.model_validate_json(draft.llm_raw)
     proposed_name = item.method_name
+
+    # LLM 输出的 subject_area 是不可信的(可能给出枚举外的"简易逻辑与不等式"等),
+    # 安全策略:若不在我们枚举里,fallback 到 problem 自身的 subject_area。
     proposed_area_str = item.subject_area or str(problem.subject_area.value)
-    proposed_area = SubjectArea(proposed_area_str)
+    try:
+        proposed_area = SubjectArea(proposed_area_str)
+    except ValueError:
+        # LLM 输出了未知板块,降级为题目自身的板块
+        proposed_area = problem.subject_area
+        # 顺手把 SI 标 suspicious,让人审核时能看到 LLM 跑偏了
+        draft.reviewer_note = (
+            f"LLM subject_area={proposed_area_str!r} 非枚举值,fallback 到 "
+            f"{problem.subject_area.value!r}。审核时请确认方法是否仍可归到这里。"
+        )
 
     # 步骤 A:精确命中
     exact = method_repo.find_by_name(proposed_name, proposed_area)
