@@ -1,0 +1,43 @@
+[project]
+name = "examforge"
+version = "0.1.0"
+description = "从历年高考压轴题提炼结构化解题方法库"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "rich>=13",
+    "sqlmodel>=0.0.22",
+    "typer>=0.12",
+]
+
+[project.scripts]
+examforge = "examforge.cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/examforge"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --tb=short"
+markers = [
+    "contract: requires real LLM/API (skipped by default)",
+]
+
+[tool.coverage.run]
+source = ["src/examforge"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+]
