@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}ExamForge{% endblock %}</title>
+<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav>
+  <a href="/">首页</a>
+  <a href="/ingest">录入</a>
+  <a href="/methods">方法库</a>
+  <a href="/review">审核队列</a>
+  <a href="/report">报告</a>
+  <a href="/qa">问答</a>
+</nav>
+<hr>
+{% block body %}{% endblock %}
+</body>
+</html>

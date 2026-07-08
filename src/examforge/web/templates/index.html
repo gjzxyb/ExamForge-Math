@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}ExamForge-Math 首页{% endblock %}
+{% block body %}
+<h1>ExamForge-Math</h1>
+<p>从历年高考压轴题中自动提炼结构化解题方法库。</p>
+<ul>
+  <li>题库:<b>{{ stats.problems }}</b> 道</li>
+  <li>已确认方法:<b>{{ stats.methods_confirmed }}</b> 个(共 {{ stats.methods_total }} 个)</li>
+  <li>待审核条目:<b>{{ stats.pending_reviews }}</b> 条</li>
+  <li>例题数(confirmed):<b>{{ stats.confirmed_instances }}</b> 条</li>
+</ul>
+<p>
+  <a href="/ingest">录入新题 →</a>
+  <a href="/methods">浏览方法库 →</a>
+  <a href="/review">去审核 →</a>
+</p>
+{% endblock %}
