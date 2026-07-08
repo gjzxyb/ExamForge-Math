@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}审核队列 · ExamForge{% endblock %}
+{% block body %}
+<h1>审核队列 ({{ items|length }})</h1>
+{% if not items %}
+<p>🎉 暂无待审条目。全部题目都已自动确认或已拒绝。</p>
+{% else %}
+<p>下表是"可疑"的解法实例(LLM 输出低置信、或归入候选新方法)。点击确认 / 拒绝 / 改归并 写入审核动作。</p>
+{% for it in items %}
+<div class="flag-suspicious">
+  <p><b>SI #{{ it.si.id }} · 题 #{{ it.problem.id }} · {{ it.problem.year }} {{ it.problem.region }} · 板块 {{ it.problem.subject_area.value }}</b></p>
+  <p><b>建议方法:</b> {{ it.method_name }}<small>(sim={{ "%.2f"|format(it.similarity) if it.similarity is not none else "n/a" }})</small></p>
+  <details>
+    <summary>题干片段</summary>
+    <p>{{ it.problem.stem_latex[:200] }}{% if it.problem.stem_latex|length > 200 %}…{% endif %}</p>
+  </details>
+  <details>
+    <summary>关键步骤</summary>
+    <p>{{ it.si.key_steps }}</p>
+  </details>
+  <details>
+    <summary>可迁移套路</summary>
+    <p>{{ it.si.transfer_note }}</p>
+  </details>
+  <p>
+    <form method="post" action="/review/{{ it.si.id }}/confirm" style="display:inline">
+      <button>✓ 确认</button>
+    </form>
+    <form method="post" action="/review/{{ it.si.id }}/reject" style="display:inline">
+      <input name="note" placeholder="拒绝原因" style="width:30em">
+      <button>✗ 拒绝</button>
+    </form>
+    <form method="post" action="/review/{{ it.si.id }}/revise" style="display:inline">
+      <input name="method_id" type="number" placeholder="改到 method_id" required style="width:10em">
+      <button>↻ 改归并</button>
+    </form>
+  </p>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

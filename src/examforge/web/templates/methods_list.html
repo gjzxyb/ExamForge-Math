@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}方法库 · ExamForge{% endblock %}
+{% block body %}
+<h1>方法库</h1>
+<form method="get" action="/methods">
+  <label>板块 <select name="area">
+    <option value="">全部</option>
+    {% for a in areas %}<option value="{{ a }}" {% if a==area %}selected{% endif %}>{{ a }}</option>{% endfor %}
+  </select></label>
+  <label>状态 <select name="status">
+    <option value="">全部</option>
+    <option value="confirmed" {% if status=="confirmed" %}selected{% endif %}>confirmed</option>
+    <option value="seed" {% if status=="seed" %}selected{% endif %}>seed</option>
+    <option value="candidate" {% if status=="candidate" %}selected{% endif %}>candidate</option>
+  </select></label>
+  <button>筛选</button>
+</form>
+<table>
+  <tr><th>方法</th><th>板块</th><th>状态</th><th>例题数</th></tr>
+  {% for m in methods %}
+  <tr class="flag-{{ m.status }}">
+    <td><a href="/methods/{{ m.id }}">{{ m.name }}</a></td>
+    <td>{{ m.subject_area }}</td>
+    <td>{{ m.status }}</td>
+    <td>{{ m.count }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" style="color:#666">无匹配方法</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

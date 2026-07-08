@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}报告 · ExamForge{% endblock %}
+{% block body %}
+<h1>解法专题报告</h1>
+<form method="get" action="/report">
+  <p><label>方法
+    <select name="method_id">
+      {% for m in methods %}
+      <option value="{{ m.id }}" {% if selected==m.id %}selected{% endif %}>{{ m.name }} ({{ m.subject_area.value }}) — {{ m.count }} 例</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button>生成报告</button></p>
+</form>
+
+{% if report %}
+<h2>预览</h2>
+<pre>{{ report }}</pre>
+<p><a href="/report?method_id={{ selected }}&download=md">下载 Markdown</a>(此功能第一版未实现,可手动复制)</p>
+{% elif selected is not none %}
+<p style="color:#c00">该方法不存在或被删除。</p>
+{% endif %}
+{% endblock %}

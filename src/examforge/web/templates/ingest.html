@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}录入新题 · ExamForge{% endblock %}
+{% block body %}
+<h1>录入新题</h1>
+{% if message %}<div class="flag-confirmed">{{ message }}</div>{% endif %}
+<form method="post" action="/ingest">
+  <p><label>年份 <input name="year" type="number" required value="2024"></label></p>
+  <p><label>地区 <input name="region" required value="全国甲卷"></label></p>
+  <p><label>板块
+    <select name="subject_area">
+      {% for a in areas %}<option {% if a == "导数" %}selected{% endif %}>{{ a }}</option>{% endfor %}
+    </select>
+  </label></p>
+  <p><label>题干(LaTeX/文本)<br><textarea name="stem" required placeholder="例:设函数 f(x)=x^3-3x, 若对任意实数 x, f(x)≥-a 恒成立, 求 a 的最大值。"></textarea></label></p>
+  <p><label>参考答案(可选)<br><textarea name="reference" placeholder="可留空"></textarea></label></p>
+  <p><label>来源 <input name="source" placeholder="如 2023 全国甲卷"></label></p>
+  <p><button type="submit">提交并跑管线</button></p>
+</form>
+<p style="color:#666">提交后会跑 Ingest→Extract→Classify→Review→Commit。可疑项会出现在 <a href="/review">审核队列</a>。</p>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ method.name }} · 方法详情{% endblock %}
+{% block body %}
+<h1>{{ method.name }} <small style="font-size:0.5em;color:#666">[{{ method.status.value }} · {{ method.subject_area.value }}]</small></h1>
+
+<h3>适用特征</h3>
+<p>{{ method.applicability or "—" }}</p>
+<h3>核心思想</h3>
+<p>{{ method.core_idea or "—" }}</p>
+<h3>通用步骤</h3>
+<pre>{{ method.procedure_steps or "—" }}</pre>
+<h3>常见坑</h3>
+<p>{{ method.pitfalls or "—" }}</p>
+
+<h3>已确认例题 ({{ examples|length }})</h3>
+{% if examples %}
+<table>
+  <tr><th>ID</th><th>年份</th><th>地区</th><th>摘要</th></tr>
+  {% for e in examples %}
+  <tr>
+    <td>#{{ e.id }}</td>
+    <td>{{ e.year }}</td>
+    <td>{{ e.region }}</td>
+    <td>{{ e.summary }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p style="color:#666">暂无 confirmed 例题。更多例题收录后会出现在此。</p>
+{% endif %}
+<p><a href="/methods">← 返回方法库</a></p>
+{% endblock %}

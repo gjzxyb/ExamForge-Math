@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}学生问答 · ExamForge{% endblock %}
+{% block body %}
+<h1>学生问答(RAG)</h1>
+<p style="color:#666">回答完全基于方法库(已沉淀的 confirmed 方法 + 例题)。不会凭空编造。</p>
+<form method="post" action="/qa">
+  <p><label>问题(贴题或提问)<br>
+    <textarea name="question" required placeholder="例:含参不等式恒成立问题怎么处理?">{{ question or '' }}</textarea>
+  </label></p>
+  <button>提交</button>
+</form>
+
+{% if answer %}
+<hr>
+<h2>回答</h2>
+<pre>{{ answer.answer }}</pre>
+{% if answer.cited_method_names %}
+<h3>引用方法</h3>
+<ul>{% for m in answer.cited_method_names %}<li>{{ m }}</li>{% endfor %}</ul>
+{% endif %}
+{% if answer.cited_problem_ids %}
+<h3>引用例题 ID</h3>
+<ul>{% for i in answer.cited_problem_ids %}<li><a href="/methods">#{{ i }}</a></li>{% endfor %}</ul>
+{% endif %}
+{% endif %}
+{% endblock %}
