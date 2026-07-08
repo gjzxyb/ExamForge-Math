@@ -34,10 +34,10 @@ async def list_view(
                 SolutionInstance.method_id == m.id,
                 SolutionInstance.review_status == ReviewStatus.CONFIRMED,
             )
-        ).one()
+        ).scalar() or 0
         out.append({
             "id": m.id, "name": m.name, "subject_area": m.subject_area.value,
-            "status": m.status.value, "count": count,
+            "status": m.status.value, "count": int(count),
         })
     return templates.TemplateResponse(request, "methods_list.html", {
         "areas": [a.value for a in SubjectArea],

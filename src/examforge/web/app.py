@@ -20,21 +20,21 @@ templates = Jinja2Templates(directory=str(BASE / "templates"))
 def _stats() -> dict:
     s = get_session()
     return {
-        "problems": s.exec(select(func.count(Problem.id))).one(),
-        "methods_total": s.exec(select(func.count(Method.id))).one(),
+        "problems": s.exec(select(func.count(Problem.id))).scalar() or 0,
+        "methods_total": s.exec(select(func.count(Method.id))).scalar() or 0,
         "methods_confirmed": s.exec(
             select(func.count(Method.id)).where(Method.status == MethodStatus.CONFIRMED)
-        ).one(),
+        ).scalar() or 0,
         "pending_reviews": s.exec(
             select(func.count(SolutionInstance.id)).where(
                 SolutionInstance.review_status == ReviewStatus.DRAFT,
             )
-        ).one(),
+        ).scalar() or 0,
         "confirmed_instances": s.exec(
             select(func.count(SolutionInstance.id)).where(
                 SolutionInstance.review_status == ReviewStatus.CONFIRMED,
             )
-        ).one(),
+        ).scalar() or 0,
     }
 
 
