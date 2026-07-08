@@ -99,26 +99,30 @@ async def save_ocr(
 @router.post("/settings/test-llm")
 async def test_llm():
     """对当前 LLM 配做一次最小请求(extract_solution 用 trivial prompt),
-    成功 → 返 {ok:true, summary},失败 → {ok:false, error:str}
+    成功 → 返 {ok:true, summary},失败 → {ok:false, error:用户友好消息}
     """
     from ...llm import get_llm
     from ...llm.schemas import ExtractedSolution
+    from ...llm.http_llm import LLMHttpError
     try:
         llm = get_llm()
-        # 测 mock 时这会很快;测 http 时真的发请求
         out = llm.extract_solution(
             stem_latex="1+1",
             reference_solution="2",
             taxonomy_hint=[],
             subject_area="其他",
         )
-        # 二次校验 schema
         ExtractedSolution.model_validate(out.model_dump())
         return JSONResponse({
             "ok": True,
             "backend": get_settings().llm.backend,
             "method_count": len(out.methods),
         })
+    except LLMHttpError as e:
+        return JSONResponse({
+            "ok": False, "error": e.as_user_message(), "status_code": e.status_code,
+            "url": e.request_url,
+        }, status_code=200)
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
 
