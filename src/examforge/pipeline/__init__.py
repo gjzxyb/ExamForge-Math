@@ -8,6 +8,8 @@ from .review import (
     is_suspicious, confirm, reject, revise_method, auto_confirm_if_clean,
 )
 from .commit import commit_solution
+from .taxonomy_provider import SqlModelTaxonomyProvider
+from .orchestrator import run_pipeline, RunResult
 
 __all__ = [
     "PipelineError", "IngestValidationError", "LLMSchemaError", "NotInReviewQueue",
@@ -16,4 +18,5 @@ __all__ = [
     "classify", "ClassifyResult",
     "is_suspicious", "confirm", "reject", "revise_method", "auto_confirm_if_clean",
     "commit_solution",
+    "SqlModelTaxonomyProvider", "run_pipeline", "RunResult",
 ]

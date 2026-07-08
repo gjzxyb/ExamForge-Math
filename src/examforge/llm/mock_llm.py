@@ -21,12 +21,12 @@ class MockLLM:
             key_steps="(占位)此方法在本题的关键步骤",
             transfer_note="(占位)可迁移套路",
             applicability="(占位)适用特征",
-            confidence=0.6,
+            confidence=0.85,
         )
         return ExtractedSolution(
             summary="(占位)思路综述",
             methods=[m],
-            overall_confidence=0.6,
+            overall_confidence=0.85,
         )
 
     def render_report(self, *, method_name, applicability, core_idea,
