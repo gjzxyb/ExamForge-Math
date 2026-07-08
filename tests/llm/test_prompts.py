@@ -1,0 +1,23 @@
+from examforge.llm.prompts import extract_user_prompt, report_user_prompt, qa_user_prompt
+
+
+def test_extract_prompt_includes_hint_names():
+    p = extract_user_prompt("stem", "ref", ["分离参数法", "切线放缩"], "导数")
+    assert "分离参数法" in p and "切线放缩" in p
+    assert "导数" in p
+
+
+def test_extract_prompt_handles_no_hint():
+    p = extract_user_prompt("stem", None, [], "导数")
+    assert "(无候选)" in p
+
+
+def test_report_prompt_lists_examples():
+    p = report_user_prompt("X", "A", "I", "P", "Pt",
+                           [{"year": 2023, "region": "甲", "summary": "题目摘要"}])
+    assert "2023" in p and "甲" in p
+
+
+def test_qa_prompt_keeps_questions_separate():
+    p = qa_user_prompt("Q?", "DOC", [{"id": 1, "summary": "x"}])
+    assert "Q?" in p and "DOC" in p
