@@ -72,9 +72,14 @@ def run_pipeline(
                 subject_area=str(problem.subject_area.value),
             )
         except Exception as e:
-            result.llm_error = f"{type(e).__name__}: {e}"
+            # 取用户友好消息
+            from ..llm.http_llm import LLMHttpError
+            if isinstance(e, LLMHttpError):
+                result.llm_error = e.as_user_message()
+            else:
+                result.llm_error = f"{type(e).__name__}: {e}"
             warnings.warn(
-                f"LLM http 调失败,降级为 mock: {e}", stacklevel=2,
+                f"LLM http 调失败,降级为 mock: {result.llm_error}", stacklevel=2,
             )
             llm = _make_mock_llm()
             llm.effective_backend = "mock_fallback"

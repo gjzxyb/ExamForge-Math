@@ -1,0 +1,51 @@
+"""HttpLLM 错误处理 + 用户友好消息。"""
+
+import pytest
+from examforge.llm.http_llm import LLMHttpError
+
+
+def test_llm_http_error_carries_status_and_url():
+    e = LLMHttpError("boom", status_code=401, body="Invalid API key",
+                     request_url="https://api.deepseek.com/v1/chat/completions")
+    assert e.status_code == 401
+    assert e.request_url.endswith("/chat/completions")
+    msg = e.as_user_message()
+    assert "URL:" in msg
+    assert "认证失败" in msg  # 401 状态码被翻译
+    assert "Invalid API key" in msg
+
+
+def test_llm_http_error_unknown_status_still_renders():
+    e = LLMHttpError("boom", status_code=418, body="I am a teapot",
+                     request_url="http://x/")
+    msg = e.as_user_message()
+    assert "HTTP 418" in msg  # 未知状态码走 fallback 文本
+    assert "I am a teapot" in msg
+
+
+def test_llm_http_error_truncates_long_body():
+    long_body = "x" * 5000
+    e = LLMHttpError("boom", status_code=500, body=long_body,
+                     request_url="http://x/")
+    # 内部 body 截到 500
+    assert len(e.body) == 500
+    # 用户消息再截到 200
+    msg = e.as_user_message()
+    assert len(msg) < 1000
+
+
+def test_status_code_meanings_cover_common_codes():
+    """关键状态码有用户友好解释。"""
+    cases = {
+        401: "认证失败",
+        402: "余额不足",
+        403: "禁止访问",
+        404: "路径错",
+        429: "限流",
+        500: "服务端内部错误",
+        502: "网关错误",
+        503: "服务不可用",
+    }
+    for code, expected_phrase in cases.items():
+        e = LLMHttpError("x", status_code=code, body="b", request_url="http://x/")
+        assert expected_phrase in e.as_user_message(), f"code {code} not translated"

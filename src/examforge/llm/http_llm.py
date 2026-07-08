@@ -20,10 +20,32 @@ DEFAULT_MODEL = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
 class LLMHttpError(RuntimeError):
     """HTTP LLM 调不通时抛此异常(替代裸 tenacity.RetryError,语义清晰)。"""
     def __init__(self, message: str, *, status_code: int | None = None,
-                 body: str | None = None) -> None:
+                 body: str | None = None, request_url: str | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+        self.request_url = request_url
         self.body = (body or "")[:500]  # 截断避免泄露太多
+
+    def as_user_message(self) -> str:
+        """给前端显示的用户友好消息:含 URL + 状态码 + body 摘要。"""
+        parts = [f"URL: {self.request_url}"] if self.request_url else []
+        if self.status_code:
+            code_meaning = {
+                401: "认证失败(API key 无效或缺失)",
+                402: "余额不足或需要付费",
+                403: "禁止访问(可能 IP 不在白名单或 region 受限)",
+                404: "路径错(检查 base_url 末尾是否要加 /v1)",
+                429: "限流(请求太频繁)",
+                500: "服务端内部错误",
+                502: "网关错误(可能是 base_url 配错)",
+                503: "服务不可用",
+            }.get(self.status_code, f"HTTP {self.status_code}")
+            parts.append(code_meaning)
+        if self.body:
+            # 截掉可能的 HTML 错误页
+            body_clean = self.body.replace("\n", " ")[:200]
+            parts.append(f"响应: {body_clean}")
+        return " · ".join(parts)
 
 
 class HttpLLM:
@@ -64,6 +86,7 @@ class HttpLLM:
                         f"HTTP {resp.status_code} from LLM",
                         status_code=resp.status_code,
                         body=resp.text,
+                        request_url=str(resp.request.url),
                     )
                 content = resp.json()["choices"][0]["message"]["content"]
                 return TypeAdapter(schema_model).validate_json(content)
@@ -74,6 +97,12 @@ class HttpLLM:
                     raise
             except (httpx.RequestError, KeyError, IndexError) as e:
                 last_err = e
+                # 连接错也带上 URL
+                if isinstance(e, httpx.RequestError) and e.request:
+                    last_err = LLMHttpError(
+                        f"无法连接 LLM: {e}",
+                        request_url=str(e.request.url),
+                    )
                 if attempt < self._max_retries:
                     import time
                     time.sleep(2 ** attempt)
