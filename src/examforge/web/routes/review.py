@@ -30,11 +30,27 @@ async def queue(
     for si in drafts:
         p = p_repo.get(si.problem_id)
         m = m_repo.get(si.method_id) if si.method_id else None
+        # 从 llm_raw 解析出 LLM 原始输出(method_name / subject_area / confidence)
+        llm_method_name = None
+        llm_subject_area = None
+        llm_confidence = None
+        try:
+            import json
+            raw = json.loads(si.llm_raw) if si.llm_raw else {}
+            llm_method_name = raw.get("method_name")
+            llm_subject_area = raw.get("subject_area")
+            llm_confidence = raw.get("confidence")
+        except Exception:
+            pass
         items.append({
             "si": si,
             "problem": p,
-            "method_name": m.name if m else "?",
-            "similarity": None,
+            # 实际挂上的 method(可能为 None,因为 candidate 还在待审)
+            "method_id": si.method_id,
+            "method_name": m.name if m else None,
+            "llm_method_name": llm_method_name,
+            "llm_subject_area": llm_subject_area,
+            "llm_confidence": llm_confidence,
         })
     return templates.TemplateResponse(request, "review_queue.html", {"items": items})
 

@@ -5,11 +5,39 @@
 {% if not items %}
 <p>🎉 暂无待审条目。全部题目都已自动确认或已拒绝。</p>
 {% else %}
-<p>下表是"可疑"的解法实例(LLM 输出低置信、或归入候选新方法)。点击确认 / 拒绝 / 改归并 写入审核动作。</p>
+<p>下表是"可疑"的解法实例(LLM 输出的方法名/板块不在 taxonomy、或置信度过低、或一题方法数过多)。
+你可以:确认(挂到当前 method)/ 拒绝(丢弃)/ 改归并到另一 method。</p>
 {% for it in items %}
 <div class="flag-suspicious">
-  <p><b>SI #{{ it.si.id }} · 题 #{{ it.problem.id }} · {{ it.problem.year }} {{ it.problem.region }} · 板块 {{ it.problem.subject_area.value }}</b></p>
-  <p><b>建议方法:</b> {{ it.method_name }}<small>(sim={{ "%.2f"|format(it.similarity) if it.similarity is not none else "n/a" }})</small></p>
+  <p>
+    <b>SI #{{ it.si.id }}</b> ·
+    题 #{{ it.problem.id }} · {{ it.problem.year }} {{ it.problem.region }} · 板块 {{ it.problem.subject_area.value }}
+  </p>
+
+  <p>
+    <b>LLM 原始输出:</b>
+    方法 <code>{{ it.llm_method_name or "—" }}</code>
+    板块 <code>{{ it.llm_subject_area or "—" }}</code>
+    置信度 <code>{{ "%.2f"|format(it.llm_confidence) if it.llm_confidence is not none else "—" }}</code>
+  </p>
+
+  <p>
+    <b>系统建议归到:</b>
+    {% if it.method_name %}
+      <a href="/methods/{{ it.method_id }}">{{ it.method_name }}</a>
+      (method_id={{ it.method_id }})
+    {% else %}
+      <span style="color:#c00">未挂到任何 method(可能是 candidate 创建后又被回退,或 method_id=0)</span>
+    {% endif %}
+  </p>
+
+  {% if it.si.reviewer_note %}
+  <p>
+    <b>系统备注:</b>
+    <span style="color:#a00">{{ it.si.reviewer_note }}</span>
+  </p>
+  {% endif %}
+
   <details>
     <summary>题干片段</summary>
     <p>{{ it.problem.stem_latex[:200] }}{% if it.problem.stem_latex|length > 200 %}…{% endif %}</p>
@@ -22,9 +50,10 @@
     <summary>可迁移套路</summary>
     <p>{{ it.si.transfer_note }}</p>
   </details>
+
   <p>
     <form method="post" action="/review/{{ it.si.id }}/confirm" style="display:inline">
-      <button>✓ 确认</button>
+      <button>✓ 确认(挂到上面"系统建议"的方法)</button>
     </form>
     <form method="post" action="/review/{{ it.si.id }}/reject" style="display:inline">
       <input name="note" placeholder="拒绝原因" style="width:30em">
