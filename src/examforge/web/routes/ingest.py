@@ -36,12 +36,29 @@ async def submit(
     embedder=Depends(embedder_dep),
     cfg=Depends(config_dep),
 ):
-    p = ingest_problem(
-        stem_latex=stem, year=year, region=region,
-        subject_area=subject_area, reference_solution=reference or None,
-        source=source, repo=p_repo,
-    )
-    r = run_pipeline(p, session=s, llm=llm, embedder=embedder, config=cfg)
+    try:
+        p = ingest_problem(
+            stem_latex=stem, year=year, region=region,
+            subject_area=subject_area, reference_solution=reference or None,
+            source=source, repo=p_repo,
+        )
+        r = run_pipeline(p, session=s, llm=llm, embedder=embedder, config=cfg)
+    except Exception as e:
+        # 兜底:管线任何阶段抛错都返 200 + 错误消息,避免 500
+        import traceback
+        tb = traceback.format_exc()
+        return templates.TemplateResponse(request, "ingest.html", {
+            "areas": [a.value for a in SubjectArea],
+            "message": None,
+            "extra_warning": (
+                f"<b>管线失败</b>:{type(e).__name__}: {e}<br>"
+                f"<details><summary>详细堆栈(给开发者)</summary>"
+                f"<pre style='max-height:20em;overflow:auto'>{tb}</pre></details>"
+                f"<br><small>请到 <a href='/settings'>设置</a> 检查 LLM/Embedder 配置,"
+                f"或直接联系开发者贴这段信息。</small>"
+            ),
+        })
+
     backend = getattr(llm, "effective_backend", "unknown")
     msg = (
         f"题目 #{p.id} 已处理: "
