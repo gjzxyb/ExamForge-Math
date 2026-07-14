@@ -733,6 +733,7 @@ async def create_method(
 
 
 
+@router.get("/methods-discover", response_class=HTMLResponse)
 @router.get("/methods/discover", response_class=HTMLResponse)
 async def discover_methods_view(
     request: Request,
@@ -790,6 +791,7 @@ async def discover_methods_view(
     })
 
 
+@router.post("/methods-discover/add")
 @router.post("/methods/discover/add")
 async def add_discovered_method(
     name: str = Form(...),

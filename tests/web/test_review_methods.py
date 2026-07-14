@@ -314,8 +314,9 @@ def test_methods_page_can_discover_web_methods_and_add_candidate(client):
     page = client.get("/methods")
     assert page.status_code == 200
     assert "全网搜索发现方法" in page.text
+    assert 'href="/methods-discover"' in page.text
 
-    discover = client.get("/methods/discover", params={
+    discover = client.get("/methods-discover", params={
         "query": "高中数学 导数 压轴题 隐零点法",
         "area": SubjectArea.DERIVATIVE.value,
         "max_results": "3",
@@ -325,7 +326,7 @@ def test_methods_page_can_discover_web_methods_and_add_candidate(client):
     assert "加入方法库候选" in discover.text
     assert "隐零点法" in discover.text or "同构构造函数法" in discover.text
 
-    r = client.post("/methods/discover/add", data={
+    r = client.post("/methods-discover/add", data={
         "name": "全网发现隐零点法",
         "subject_area": SubjectArea.DERIVATIVE.value,
         "applicability": "适用于导数零点和极值点无法显式求出的压轴题",

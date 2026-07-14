@@ -115,3 +115,7 @@ input:not([type]) { width: 100%; padding: 6px; font-family: inherit; font-size: 
 .discovery-list { display: grid; gap: 1rem; }
 .discovery-card { border: 1px solid #d7e5ff; background: #fbfdff; border-radius: 10px; padding: 0.95rem 1rem; }
 .discovery-card h3 { margin-top: 0; }
+
+.title-actions .primary-action { margin-top: 0; }
+.title-actions .button-link { padding: 0.55rem 0.9rem; line-height: 1.2; }
+.title-actions { align-items: center; }

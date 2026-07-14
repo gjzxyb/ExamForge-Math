@@ -7,7 +7,7 @@
 
 <section class="detail-card">
   <h2>搜索条件</h2>
-  <form method="get" action="/methods/discover" class="discover-form">
+  <form method="get" action="/methods-discover" class="discover-form">
     <div class="form-row">
       <label>关键词
         <input name="query" value="{{ query }}" placeholder="如 高中数学 导数 压轴题 先进解法 隐零点法" required>
@@ -39,7 +39,7 @@
       <p><b>适用特征：</b>{{ c.applicability }}</p>
       <p><b>核心思想：</b>{{ c.core_idea }}</p>
       {% if c.source_url %}<p class="muted">来源：<a href="{{ c.source_url }}" target="_blank" rel="noreferrer">{{ c.source_title or c.source_url }}</a></p>{% endif %}
-      <form method="post" action="/methods/discover/add">
+      <form method="post" action="/methods-discover/add">
         <input type="hidden" name="name" value="{{ c.name }}">
         <input type="hidden" name="subject_area" value="{{ c.subject_area }}">
         <input type="hidden" name="applicability" value="{{ c.applicability }}">
