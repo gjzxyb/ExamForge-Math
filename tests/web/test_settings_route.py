@@ -133,6 +133,10 @@ def test_settings_test_llm_with_mock_succeeds(client):
     # 默认 mock,应该 OK
     assert body["ok"] is True
     assert body["backend"] == "mock"
+    assert body["configured_backend"] == "mock"
+    assert body["method_count"] >= 1
+    assert body["answer_ok"] is True
+    assert body["elapsed_ms"] >= 0
 
 
 def test_settings_test_embedder_with_mock_succeeds(client):
@@ -173,3 +177,19 @@ def test_changing_llm_backend_takes_effect(client):
     })
     assert r.status_code == 200
     assert "已处理" in r.text
+
+def test_settings_test_llm_http_without_key_is_not_false_ok(client):
+    client.post("/settings/llm", data={
+        "backend": "http",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "",
+        "model": "deepseek-chat",
+        "timeout": "60.0",
+    })
+    r = client.post("/settings/test-llm")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert body["configured_backend"] == "http"
+    assert body["backend"].startswith("mock_fallback")
+    assert "实际已降级为 mock" in body["error"]

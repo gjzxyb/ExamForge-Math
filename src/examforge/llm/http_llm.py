@@ -67,8 +67,11 @@ class LLMHttpError(RuntimeError):
         self.body = (body or "")[:500]  # 截断避免泄露太多
 
     def as_user_message(self) -> str:
-        """给前端显示的用户友好消息:含 URL + 状态码 + body 摘要。"""
+        """给前端显示的用户友好消息:含 URL、状态码、底层异常与 body 摘要。"""
         parts = [f"URL: {self.request_url}"] if self.request_url else []
+        raw_message = str(self)
+        if raw_message and not raw_message.startswith("HTTP "):
+            parts.append(f"错误: {raw_message}")
         if self.status_code:
             code_meaning = {
                 401: "认证失败(API key 无效或缺失)",
@@ -85,14 +88,18 @@ class LLMHttpError(RuntimeError):
             # 截掉可能的 HTML 错误页
             body_clean = self.body.replace("\n", " ")[:200]
             parts.append(f"响应: {body_clean}")
-        return " · ".join(parts)
+        msg = " · ".join(parts) or raw_message
+        lower = msg.lower()
+        if "timed out" in lower or "timeout" in lower or "超时" in msg:
+            msg += " · 建议在设置中增大 LLM Timeout 到 120-180 秒；正式录入 prompt 比测试 ping 更长。"
+        return msg
 
 
 class HttpLLM:
     def __init__(self, base_url: str = DEFAULT_BASE, api_key: str = DEFAULT_KEY,
                  model: str = DEFAULT_MODEL, timeout: float = 60.0,
                  max_retries: int = 2) -> None:
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self._timeout = timeout
@@ -137,10 +144,16 @@ class HttpLLM:
                     raise
             except (httpx.RequestError, KeyError, IndexError) as e:
                 last_err = e
-                # 连接错也带上 URL
+                # 连接错也带上 URL。Timeout 单独说明,否则 str(ReadTimeout) 为空时前端只剩 URL。
                 if isinstance(e, httpx.RequestError) and e.request:
+                    if isinstance(e, httpx.TimeoutException):
+                        detail = str(e) or f"请求超过 {self._timeout} 秒未返回"
+                        message = f"LLM 请求超时: {detail}"
+                    else:
+                        detail = str(e) or e.__class__.__name__
+                        message = f"无法连接 LLM: {detail}"
                     last_err = LLMHttpError(
-                        f"无法连接 LLM: {e}",
+                        message,
                         request_url=str(e.request.url),
                     )
                 if attempt < self._max_retries:

@@ -137,8 +137,11 @@ function testConn(label, url, resultId) {
     .then(({ status, body }) => {
       if (body.ok) {
         el.textContent = "✓ OK · backend=" + body.backend
+          + (body.configured_backend && body.configured_backend !== body.backend ? " (configured=" + body.configured_backend + ")" : "")
           + (body.dim ? " · dim=" + body.dim : "")
-          + (body.method_count !== undefined ? " · methods=" + body.method_count : "");
+          + (body.method_count !== undefined ? " · methods=" + body.method_count : "")
+          + (body.answer_ok !== undefined ? " · answer=" + (body.answer_ok ? "ok" : "empty") : "")
+          + (body.elapsed_ms !== undefined ? " · " + body.elapsed_ms + "ms" : "");
         el.style.color = "#198754";
       } else {
         el.textContent = "✗ " + (body.error || "unknown");

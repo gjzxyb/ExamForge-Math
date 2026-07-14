@@ -89,3 +89,14 @@ def test_http_llm_chat_json_accepts_real_model_empty_string_secondary_theorems()
     llm._client = FakeClient()
     out = llm._chat_json(system="s", user="u", schema_model=ExtractedSolution)
     assert out.methods[0].secondary_theorems == []
+
+
+def test_llm_http_error_includes_request_error_message_without_status():
+    e = LLMHttpError(
+        "LLM 请求超时: 请求超过 3 秒未返回",
+        request_url="https://api.deepseek.com/v1/chat/completions",
+    )
+    msg = e.as_user_message()
+    assert "URL:" in msg
+    assert "LLM 请求超时" in msg
+    assert "Timeout" in msg

@@ -71,7 +71,7 @@ def run_pipeline(
             msg = exc.as_user_message() or str(exc)
         else:
             msg = f"{type(exc).__name__}: {exc}"
-        if "timed out" in msg.lower() or "timeout" in msg.lower() or "超时" in msg:
+        if ("timed out" in msg.lower() or "timeout" in msg.lower() or "超时" in msg) and "建议" not in msg:
             msg += "；建议在设置中增大 LLM Timeout，或检查 Base URL/网络连通性。"
         return msg
 

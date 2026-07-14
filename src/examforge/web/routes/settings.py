@@ -138,33 +138,72 @@ async def save_ocr(
 
 @router.post("/settings/test-llm")
 async def test_llm():
-    """对当前 LLM 配做一次最小请求(extract_solution 用 trivial prompt),
-    成功 → 返 {ok:true, summary},失败 → {ok:false, error:用户友好消息}
+    """对当前 LLM 配置做接近录入链路的探测。
+
+    旧实现只用 1+1 极小 prompt 测 extract_solution,容易出现“设置页 OK,
+    正式录入长 prompt 超时”的假阳性。这里同时测试:
+    - 实际执行后端是否真为 http,避免配置 http 但缺 key 时 mock 兜底还显示 OK;
+    - 代表性压轴题 extract_solution;
+    - 缺失答案场景 generate_answer。
     """
+    import time
     from ...llm import get_llm
-    from ...llm.schemas import ExtractedSolution
+    from ...llm.schemas import ExtractedSolution, GeneratedAnswer
     from ...llm.http_llm import LLMHttpError
+
+    configured_backend = get_settings().llm.backend
+    started = time.perf_counter()
     try:
         llm = get_llm()
+        effective_backend = getattr(llm, "effective_backend", configured_backend)
+        if configured_backend == "http" and not str(effective_backend).startswith("http"):
+            return JSONResponse({
+                "ok": False,
+                "backend": effective_backend,
+                "configured_backend": configured_backend,
+                "error": "LLM 配置为 http,但实际已降级为 mock。请检查 API Key、Base URL 和模型名称后再测试。",
+            }, status_code=200)
+
+        probe_stem = (
+            "设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, "
+            "$f(x)\\ge -a$ 恒成立, 求 $a$ 的最大值。"
+        )
         out = llm.extract_solution(
-            stem_latex="1+1",
-            reference_solution="2",
-            taxonomy_hint=[],
-            subject_area="其他",
+            stem_latex=probe_stem,
+            reference_solution="先求 $f(x)$ 的最小值为 -2, 因而 $a=2$。",
+            taxonomy_hint=["分离参数法", "切线放缩"],
+            subject_area="导数",
         )
         ExtractedSolution.model_validate(out.model_dump())
+        generated = llm.generate_answer(
+            stem_latex=probe_stem,
+            subject_area="导数",
+            reference_solution=None,
+        )
+        GeneratedAnswer.model_validate(generated.model_dump())
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         return JSONResponse({
             "ok": True,
-            "backend": get_settings().llm.backend,
+            "backend": effective_backend,
+            "configured_backend": configured_backend,
             "method_count": len(out.methods),
+            "answer_ok": bool(generated.answer),
+            "elapsed_ms": elapsed_ms,
         })
     except LLMHttpError as e:
         return JSONResponse({
-            "ok": False, "error": e.as_user_message(), "status_code": e.status_code,
+            "ok": False,
+            "error": e.as_user_message(),
+            "status_code": e.status_code,
             "url": e.request_url,
+            "backend": configured_backend,
         }, status_code=200)
     except Exception as e:
-        return JSONResponse({"ok": False, "error": str(e)}, status_code=200)
+        return JSONResponse({
+            "ok": False,
+            "error": f"{type(e).__name__}: {e}",
+            "backend": configured_backend,
+        }, status_code=200)
 
 
 @router.post("/settings/test-embedder")
