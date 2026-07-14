@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 from pydantic import TypeAdapter
-from .schemas import ExtractedSolution, ReportedSections, QAResult
+from .schemas import ExtractedSolution, ReportedSections, QAResult, GeneratedAnswer
 
 
 DEFAULT_BASE = os.environ.get("EXAMFORGE_LLM_BASE", "https://api.deepseek.com/v1")
@@ -158,6 +158,12 @@ class HttpLLM:
         sys = apply_model_control(EXTRACT_SYSTEM)
         user = extract_user_prompt(stem_latex, reference_solution, taxonomy_hint, subject_area)
         return self._chat_json(system=sys, user=user, schema_model=ExtractedSolution)
+
+    def generate_answer(self, *, stem_latex, subject_area, reference_solution=None):
+        from .prompts import ANSWER_SYSTEM, apply_model_control, answer_user_prompt
+        sys = apply_model_control(ANSWER_SYSTEM)
+        user = answer_user_prompt(stem_latex, subject_area, reference_solution)
+        return self._chat_json(system=sys, user=user, schema_model=GeneratedAnswer)
 
     def render_report(self, *, method_name, applicability, core_idea,
                       procedure, pitfalls, examples):

@@ -50,6 +50,27 @@ def test_e2e_qa_returns_answer(app_client):
     assert "回答" in r.text or "answer" in r.text.lower()
 
 
+def test_e2e_ingest_generates_answer_when_missing(app_client):
+    from examforge.repositories import problem_repo, make_fingerprint
+
+    stem = "若 a>0, 任意实数 x, f(x)=x^3-3x >= -a 恒成立, 求 a 的最大值"
+    r = app_client.post("/ingest", data={
+        "year": 2026,
+        "region": "自动答案测试卷",
+        "subject_area": "导数",
+        "stem": stem,
+        "answer": "",
+        "source": "auto answer e2e",
+    })
+    assert r.status_code == 200
+    assert "自动生成答案" in r.text
+    fp = make_fingerprint(stem, 2026, "自动答案测试卷")
+    p = problem_repo().find_by_fingerprint(fp)
+    assert p is not None
+    assert p.answer
+    assert "自动生成占位答案" in p.answer
+
+
 def test_e2e_methods_list_renders(app_client):
     r = app_client.get("/methods?area=导数")
     assert r.status_code == 200

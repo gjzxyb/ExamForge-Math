@@ -44,6 +44,22 @@ class ExtractedSolution(BaseModel):
     overall_confidence: float = Field(ge=0.0, le=1.0)
 
 
+class GeneratedAnswer(BaseModel):
+    """缺失答案时由 LLM/API 生成的结构化答案。"""
+
+    @field_validator("answer")
+    @classmethod
+    def answer_must_not_be_blank(cls, value: str) -> str:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            raise ValueError("生成答案不能为空")
+        return cleaned
+
+    answer: str = Field(description="题目的答案/最终结果,可含 LaTeX")
+    analysis_steps: str = Field(default="", description="生成答案所依据的简要解题步骤")
+    confidence: float = Field(ge=0.0, le=1.0, default=0.7, description="生成答案置信度")
+
+
 class ReportedSections(BaseModel):
     """Reporter 的输出(章节化结构)。"""
     intro: str

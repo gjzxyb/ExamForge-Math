@@ -103,3 +103,29 @@ def qa_user_prompt(question: str, method_doc: str, examples: list[dict]) -> str:
 
 输出 JSON:answer/cited_method_names/cited_problem_ids。
 """
+
+ANSWER_SYSTEM = """你是高中数学答案生成助手。
+任务:在录入环节题目缺少答案时,根据题干与可选参考材料生成“答案/最终结果”。
+要求:
+- 优先给出最终答案,必要时包含 LaTeX。
+- analysis_steps 只写简要推导依据,不要冒充官方解析。
+- 不确定时也要给出最可能答案,并降低 confidence。
+- 输出必须是严格 JSON,不含其它文本。
+"""
+
+
+def answer_user_prompt(stem: str, subject_area: str, reference: str | None = None) -> str:
+    ref = reference or "(无参考材料)"
+    return f"""所属模块:{subject_area}
+
+题干(LaTeX/文本):
+{stem}
+
+可选参考材料:
+{ref}
+
+请输出 JSON,字段:
+- answer: 答案/最终结果,可含 LaTeX
+- analysis_steps: 简要推导步骤,用于提示该答案如何得出
+- confidence: 0 到 1 的置信度
+"""

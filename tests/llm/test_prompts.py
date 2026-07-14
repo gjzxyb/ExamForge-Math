@@ -1,4 +1,4 @@
-from examforge.llm.prompts import extract_user_prompt, report_user_prompt, qa_user_prompt
+from examforge.llm.prompts import extract_user_prompt, report_user_prompt, qa_user_prompt, answer_user_prompt
 
 
 def test_extract_prompt_includes_hint_names():
@@ -21,3 +21,10 @@ def test_report_prompt_lists_examples():
 def test_qa_prompt_keeps_questions_separate():
     p = qa_user_prompt("Q?", "DOC", [{"id": 1, "summary": "x"}])
     assert "Q?" in p and "DOC" in p
+
+def test_answer_prompt_requests_json_fields():
+    p = answer_user_prompt("stem", "导数", None)
+    assert "answer" in p
+    assert "analysis_steps" in p
+    assert "confidence" in p
+    assert "导数" in p

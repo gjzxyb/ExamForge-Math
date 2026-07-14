@@ -6,6 +6,19 @@
 <p class="paste-ocr-hint">💡 新增：年份以外的文字输入框，以及题目、答案、官方解析、参考答案文本框均支持 <b>直接 Ctrl+V 粘贴图片并 OCR 识别</b>；“题图/几何图截图”区域也支持 <b>Ctrl+V 直接粘贴截图作为题图上传</b>。</p>
 
 {% if message %}<div class="flag-confirmed">{{ message }}</div>{% endif %}
+{% if generated_answer %}
+<div class="flag-confirmed generated-answer-card">
+  <b>自动生成答案：</b>{{ generated_answer }}
+  {% if generated_answer_confidence is not none %}
+    <span class="muted"> · 置信度 {{ "%.0f"|format(generated_answer_confidence * 100) }}%</span>
+  {% endif %}
+  {% if generated_answer_steps %}
+    <details style="margin-top:0.45rem"><summary>查看生成依据</summary>
+      <div class="method-detail-text">{{ generated_answer_steps }}</div>
+    </details>
+  {% endif %}
+</div>
+{% endif %}
 {% if extra_warning %}<div class="flag-suspicious">{{ extra_warning|safe }}</div>{% endif %}
 
 <div class="feature-grid">

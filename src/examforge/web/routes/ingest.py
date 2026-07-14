@@ -15,6 +15,46 @@ from ...pipeline import ingest_problem, run_pipeline
 router = APIRouter()
 
 
+def _friendly_llm_error(exc: Exception) -> str:
+    """把 LLM/API 异常压缩成前端可读消息。"""
+    try:
+        from ...llm.http_llm import LLMHttpError
+        if isinstance(exc, LLMHttpError):
+            return exc.as_user_message() or str(exc)
+    except Exception:
+        pass
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _generate_missing_answer_fail_open(
+    llm,
+    *,
+    stem_latex: str,
+    subject_area: str,
+    reference_solution: str | None,
+):
+    """缺失答案时调用当前 LLM/API 生成答案；失败则降级 mock,不阻断录入。"""
+    from ...llm.mock_llm import MockLLM
+
+    try:
+        generated = llm.generate_answer(
+            stem_latex=stem_latex,
+            subject_area=subject_area,
+            reference_solution=reference_solution,
+        )
+        return generated, ""
+    except Exception as exc:
+        warning = _friendly_llm_error(exc)
+        mock = MockLLM()
+        mock.effective_backend = "mock_fallback"
+        generated = mock.generate_answer(
+            stem_latex=stem_latex,
+            subject_area=subject_area,
+            reference_solution=reference_solution,
+        )
+        return generated, warning
+
+
 async def _save_figure_upload(request: Request, figure: UploadFile | None) -> str | None:
     """保存题图/几何图截图,返回可被浏览器访问的 /uploads/... 路径。"""
     if figure is None or not figure.filename:
@@ -37,6 +77,9 @@ async def form(request: Request):
         "areas": [a.value for a in SubjectArea],
         "message": None,
         "extra_warning": None,
+        "generated_answer": None,
+        "generated_answer_steps": None,
+        "generated_answer_confidence": None,
     })
 
 
@@ -91,10 +134,29 @@ async def submit(
     embedder=Depends(embedder_dep),
     cfg=Depends(config_dep),
 ):
+    generated_answer = None
+    generated_answer_steps = None
+    generated_answer_confidence = None
+    answer_generation_warning = ""
     try:
         image_ref = await _save_figure_upload(request, figure)
         # LLM 仍读取 reference_solution;优先使用官方解析步骤,兼容旧的 reference 字段。
         reference_solution = official_analysis_steps or reference or None
+        answer = (answer or "").strip()
+        if not answer:
+            generated, answer_generation_warning = _generate_missing_answer_fail_open(
+                llm,
+                stem_latex=stem,
+                subject_area=subject_area,
+                reference_solution=reference_solution,
+            )
+            generated_answer = (generated.answer or "").strip()
+            generated_answer_steps = (generated.analysis_steps or "").strip()
+            generated_answer_confidence = generated.confidence
+            if generated_answer:
+                answer = generated_answer
+                if not reference_solution:
+                    reference_solution = generated_answer
         p = ingest_problem(
             stem_latex=stem, year=year, region=region,
             subject_area=subject_area, reference_solution=reference_solution,
@@ -120,9 +182,11 @@ async def submit(
                 f"<br><small>请到 <a href='/settings'>设置</a> 检查 LLM/Embedder 配置,"
                 f"或直接联系开发者贴这段信息。</small>"
             ),
+            "generated_answer": generated_answer,
+            "generated_answer_steps": generated_answer_steps,
+            "generated_answer_confidence": generated_answer_confidence,
         })
 
-    backend = getattr(llm, "effective_backend", "unknown")
     msg = (
         f"题目 #{p.id} 已处理: "
         f"confirmed={len(r.confirmed)} · "
@@ -147,8 +211,17 @@ async def submit(
             "<small>要在 ingest 时调用 DeepSeek 分析,请到 "
             "<a href=\"/settings\">设置</a> 填入 API key 并把后端切到 http。</small>"
         )
+    if answer_generation_warning:
+        answer_warning = (
+            "⚠ 缺失答案自动生成时真实 API 调用失败,已用 mock 占位答案兜底。<br>"
+            f"<small>错误:{answer_generation_warning[:300]}</small>"
+        )
+        extra_warning = f"{extra_warning}<hr>{answer_warning}" if extra_warning else answer_warning
     return templates.TemplateResponse(request, "ingest.html", {
         "areas": [a.value for a in SubjectArea],
         "message": msg,
         "extra_warning": extra_warning,
+        "generated_answer": generated_answer,
+        "generated_answer_steps": generated_answer_steps,
+        "generated_answer_confidence": generated_answer_confidence,
     })

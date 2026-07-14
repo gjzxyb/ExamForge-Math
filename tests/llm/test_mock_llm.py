@@ -17,3 +17,15 @@ def test_mock_extract_returns_valid_schema():
 def test_factory_default_returns_mock(monkeypatch):
     monkeypatch.delenv("EXAMFORGE_LLM_BACKEND", raising=False)
     assert get_llm().__class__.__name__ == "MockLLM"
+
+def test_mock_generate_answer_returns_generated_answer():
+    llm = MockLLM()
+    out = llm.generate_answer(
+        stem_latex="若对任意 x, x^2+a>=0 恒成立, 求 a",
+        subject_area="导数",
+        reference_solution=None,
+    )
+    assert out.answer
+    assert "自动生成占位答案" in out.answer
+    assert out.analysis_steps
+    assert 0.0 <= out.confidence <= 1.0

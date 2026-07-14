@@ -1,6 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from examforge.llm import ExtractedSolution, ProposedMethodUse
+from examforge.llm import ExtractedSolution, ProposedMethodUse, GeneratedAnswer
 
 
 def test_extracted_solution_validates_valid_payload():
@@ -64,3 +64,19 @@ def test_extracted_solution_splits_secondary_theorems_string_from_llm():
     }
     obj = ExtractedSolution.model_validate(data)
     assert obj.methods[0].secondary_theorems == ["罗尔定理", "介值定理", "闭区间最值定理"]
+
+
+def test_generated_answer_validates_confidence():
+    obj = GeneratedAnswer.model_validate({
+        "answer": "$a=2$",
+        "analysis_steps": "求最值得到答案",
+        "confidence": 0.8,
+    })
+    assert obj.answer == "$a=2$"
+    with pytest.raises(ValidationError):
+        GeneratedAnswer(answer="x", confidence=1.2)
+
+
+def test_generated_answer_rejects_blank_answer():
+    with pytest.raises(ValidationError):
+        GeneratedAnswer(answer="   ", confidence=0.7)
