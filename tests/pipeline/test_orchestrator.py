@@ -88,3 +88,54 @@ def test_pipeline_http_llm_timeout_falls_back_to_mock(ctx):
     assert "timed out" in r.llm_error
     assert "增大 LLM Timeout" in r.llm_error
     assert len(r.confirmed) + len(r.suspicions) >= 1
+
+
+
+def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
+    from examforge.repositories import get_session
+    from examforge.llm.http_llm import LLMHttpError
+    from examforge.llm.schemas import ExtractedSolution, ProposedMethodUse
+
+    class FlakyProbeLLM:
+        effective_backend = "http"
+
+        def __init__(self):
+            self.calls = 0
+
+        def extract_solution(self, **kwargs):
+            self.calls += 1
+            if self.calls < 3:
+                raise LLMHttpError(f"probe failed {self.calls}")
+            return ExtractedSolution(
+                summary="思路",
+                methods=[ProposedMethodUse(
+                    method_name="分离参数法",
+                    subject_area="导数",
+                    key_steps="分离参数后求函数最值",
+                    transfer_note="恒成立转最值",
+                    applicability="含参恒成立",
+                    confidence=0.9,
+                )],
+                overall_confidence=0.9,
+            )
+
+    llm = FlakyProbeLLM()
+    p = problem_repo().upsert_by_fingerprint(Problem(
+        year=2026,
+        region="试探重试卷",
+        subject_area=SubjectArea.DERIVATIVE,
+        stem_latex="若 a>0, 任意实数 x, f(x)=x^3-3x >= -a 恒成立, 求 a 的最大值。",
+        reference_solution="a=2",
+        content_fingerprint=make_fingerprint("probe-retry", 2026, "试探重试卷"),
+    ))
+    r = run_pipeline(
+        p,
+        session=get_session(),
+        llm=llm,
+        embedder=MockEmbedder(),
+        config=PipelineConfig(),
+    )
+    assert llm.calls == 4  # 前两次试探失败,第 3 次试探成功,第 4 次正式 Extract
+    assert r.llm_backend_used == "http"
+    assert r.llm_error == ""
+    assert len(r.confirmed) + len(r.suspicions) >= 1
