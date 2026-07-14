@@ -60,6 +60,16 @@ def test_validate_llm_json_normalizes_secondary_theorems_empty_string():
     assert out.methods[0].secondary_theorems == []
 
 
+def test_validate_llm_json_normalizes_key_steps_array_from_llm():
+    from examforge.llm.http_llm import _validate_llm_json
+    from examforge.llm.schemas import ExtractedSolution
+
+    content = '{"summary":["思路一","思路二"],"methods":[{"method_name":"定义法","subject_area":"数与式","key_steps":["识别为加法运算","根据加法定义得出和 2"],"transfer_note":"套路","applicability":"条件","key_theorem":"","secondary_theorems":"","confidence":0.8}],"overall_confidence":0.8}'
+    out = _validate_llm_json(content, ExtractedSolution)
+    assert out.summary == "思路一\n思路二"
+    assert out.methods[0].key_steps == "识别为加法运算\n根据加法定义得出和 2"
+
+
 def test_http_llm_chat_json_accepts_real_model_empty_string_secondary_theorems():
     from examforge.llm.http_llm import HttpLLM
     from examforge.llm.schemas import ExtractedSolution
