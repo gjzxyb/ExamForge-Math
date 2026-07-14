@@ -6,6 +6,9 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+DEFAULT_LLM_CONFIDENCE = 0.6
+
+
 def normalize_llm_text(value: Any) -> str:
     """兼容真实 LLM 把字符串字段误返回成 list/dict/None 的情况。
 
@@ -34,6 +37,41 @@ def normalize_llm_text(value: Any) -> str:
     return str(value).strip()
 
 
+def normalize_llm_confidence(value: Any, *, default: float = DEFAULT_LLM_CONFIDENCE) -> Any:
+    """兼容真实 LLM 漏填或用空值/数组返回 confidence。
+
+    置信度是辅助排序字段,不应因为模型漏填导致整条录入管线失败;
+    明确给出的非法数值仍交给 Pydantic 的 ge/le 约束暴露。
+    """
+    if value is None or value == "":
+        return default
+    if isinstance(value, list):
+        for item in value:
+            normalized = normalize_llm_confidence(item, default=default)
+            if normalized != default:
+                return normalized
+        return default
+    if isinstance(value, dict):
+        for key in ("confidence", "score", "value"):
+            if key in value:
+                return normalize_llm_confidence(value[key], default=default)
+        return default
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return default
+        if text.endswith("%"):
+            try:
+                return float(text[:-1].strip()) / 100
+            except ValueError:
+                return default
+        try:
+            return float(text)
+        except ValueError:
+            return default
+    return value
+
+
 class ProposedMethodUse(BaseModel):
     """LLM 提出的某方法使用情况。"""
 
@@ -44,6 +82,11 @@ class ProposedMethodUse(BaseModel):
     @classmethod
     def normalize_text_fields(cls, value: Any) -> str:
         return normalize_llm_text(value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value: Any) -> Any:
+        return normalize_llm_confidence(value)
 
     @field_validator("secondary_theorems", mode="before")
     @classmethod
@@ -71,7 +114,7 @@ class ProposedMethodUse(BaseModel):
     applicability: str = Field(description="此方法的适用特征描述")
     key_theorem: str = Field(default="", description="本题若有更优定理/关键定理,写定理名称与简述;没有则留空")
     secondary_theorems: list[str] = Field(default_factory=list, description="本题用到的二级定理、推论或常用结论;没有则空列表")
-    confidence: float = Field(ge=0.0, le=1.0, description="LLM 自报置信度")
+    confidence: float = Field(default=DEFAULT_LLM_CONFIDENCE, ge=0.0, le=1.0, description="LLM 自报置信度")
 
 
 class ExtractedSolution(BaseModel):
@@ -82,9 +125,14 @@ class ExtractedSolution(BaseModel):
     def normalize_summary(cls, value: Any) -> str:
         return normalize_llm_text(value)
 
+    @field_validator("overall_confidence", mode="before")
+    @classmethod
+    def normalize_overall_confidence(cls, value: Any) -> Any:
+        return normalize_llm_confidence(value)
+
     summary: str = Field(description="整道题的一句话思路综述")
     methods: list[ProposedMethodUse]
-    overall_confidence: float = Field(ge=0.0, le=1.0)
+    overall_confidence: float = Field(default=DEFAULT_LLM_CONFIDENCE, ge=0.0, le=1.0)
 
 
 class GeneratedAnswer(BaseModel):
@@ -94,6 +142,11 @@ class GeneratedAnswer(BaseModel):
     @classmethod
     def normalize_text_fields(cls, value: Any) -> str:
         return normalize_llm_text(value)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value: Any) -> Any:
+        return normalize_llm_confidence(value, default=0.7)
 
     @field_validator("answer")
     @classmethod

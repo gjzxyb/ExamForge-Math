@@ -88,6 +88,42 @@ def test_extracted_solution_normalizes_llm_text_arrays():
     assert "加法定义" in obj.methods[0].key_theorem
 
 
+def test_extracted_solution_defaults_missing_confidence_from_llm():
+    data = {
+        "summary": "用加法定义直接计算",
+        "methods": [{
+            "method_name": "加法定义",
+            "subject_area": "数与式",
+            "key_steps": ["将两个1相加", "根据加法定义得到2。"],
+            "transfer_note": "同类基础运算先还原定义",
+            "applicability": "题干直接要求计算",
+            "secondary_theorems": "",
+        }],
+    }
+    obj = ExtractedSolution.model_validate(data)
+    assert obj.methods[0].key_steps == "将两个1相加\n根据加法定义得到2。"
+    assert obj.methods[0].confidence == 0.6
+    assert obj.overall_confidence == 0.6
+
+
+def test_extracted_solution_normalizes_empty_confidence_from_llm():
+    data = {
+        "summary": "思路",
+        "methods": [{
+            "method_name": "定义法",
+            "subject_area": "数与式",
+            "key_steps": "步骤",
+            "transfer_note": "套路",
+            "applicability": "条件",
+            "confidence": "",
+        }],
+        "overall_confidence": "80%",
+    }
+    obj = ExtractedSolution.model_validate(data)
+    assert obj.methods[0].confidence == 0.6
+    assert obj.overall_confidence == 0.8
+
+
 def test_generated_answer_normalizes_step_arrays_from_llm():
     obj = GeneratedAnswer.model_validate({
         "answer": ["$2$"],
