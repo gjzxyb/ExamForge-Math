@@ -39,6 +39,12 @@ def test_e2e_ingest_runs_pipeline(app_client):
     })
     assert r.status_code == 200
     assert "已处理" in r.text
+    assert "去审核队列处理" in r.text
+
+    review = app_client.get("/review")
+    assert review.status_code == 200
+    assert "审核队列 (1)" in review.text
+    assert "新录入题目默认进入审核队列" in review.text
 
 
 def test_e2e_qa_returns_answer(app_client):

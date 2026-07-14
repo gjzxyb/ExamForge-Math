@@ -80,6 +80,7 @@ async def form(request: Request):
         "generated_answer": None,
         "generated_answer_steps": None,
         "generated_answer_confidence": None,
+        "queued_count": 0,
     })
 
 
@@ -167,7 +168,10 @@ async def submit(
             image_ref=image_ref,
             source=source, repo=p_repo,
         )
-        r = run_pipeline(p, session=s, llm=llm, embedder=embedder, config=cfg)
+        r = run_pipeline(
+            p, session=s, llm=llm, embedder=embedder, config=cfg,
+            force_review=True,
+        )
     except Exception as e:
         # 兜底:管线任何阶段抛错都返 200 + 错误消息,避免 500
         import traceback
@@ -185,6 +189,7 @@ async def submit(
             "generated_answer": generated_answer,
             "generated_answer_steps": generated_answer_steps,
             "generated_answer_confidence": generated_answer_confidence,
+            "queued_count": 0,
         })
 
     msg = (
@@ -194,6 +199,7 @@ async def submit(
         f"candidates_new={len(r.candidates_new)} · "
         f"LLM=[{r.llm_backend_used}]"
     )
+    queued_count = len(r.suspicions)
     if image_ref:
         msg += " · 已保存题图"
     if ocr_provider != "none":
@@ -224,4 +230,5 @@ async def submit(
         "generated_answer": generated_answer,
         "generated_answer_steps": generated_answer_steps,
         "generated_answer_confidence": generated_answer_confidence,
+        "queued_count": queued_count,
     })

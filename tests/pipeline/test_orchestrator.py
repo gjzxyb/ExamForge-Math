@@ -139,3 +139,29 @@ def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
     assert r.llm_backend_used == "http"
     assert r.llm_error == ""
     assert len(r.confirmed) + len(r.suspicions) >= 1
+
+
+def test_pipeline_force_review_keeps_clean_problem_in_review_queue(ctx):
+    from examforge.repositories import get_session, solution_repo
+
+    p = problem_repo().upsert_by_fingerprint(Problem(
+        year=2026,
+        region="强制审核测试卷",
+        subject_area=SubjectArea.DERIVATIVE,
+        stem_latex="若 a>0, 任意实数 x, f(x)=x^3-3x >= -a 恒成立, 求 a 的最大值。",
+        reference_solution="a=2",
+        content_fingerprint=make_fingerprint("force-review", 2026, "强制审核测试卷"),
+    ))
+    r = run_pipeline(
+        p,
+        session=get_session(),
+        llm=MockLLM(),
+        embedder=MockEmbedder(),
+        config=PipelineConfig(),
+        force_review=True,
+    )
+    assert r.confirmed == []
+    assert len(r.suspicions) >= 1
+    queued = solution_repo().list_by_review_status(ReviewStatus.DRAFT)
+    assert any(si.id in r.suspicions for si in queued)
+    assert any("新录入题目默认进入审核队列" in si.reviewer_note for si in queued)

@@ -45,11 +45,15 @@ def run_pipeline(
     embedder: Embedder,
     config: PipelineConfig,
     fail_open: bool = True,
+    force_review: bool = False,
 ) -> RunResult:
     """端到端管线。
 
     fail_open=True(默认):若 LLM/Embedder 调真实 API 失败,降级为 mock 并在
     result.llm_error 中记录错误信息(不抛异常,确保 UI 还能继续工作)。
+
+    force_review=True:即使命中已有方法且置信度较高,也不自动确认/入向量库,
+    而是统一保持 DRAFT,确保 Web 录入的新题先进入审核队列。
     """
     p_repo = ProblemRepo(session)
     m_repo = MethodRepo(session)
@@ -146,7 +150,13 @@ def run_pipeline(
             methods_count_for_problem=len(drafts),
             config=config,
         )
-        if susp:
+        if force_review:
+            si.review_status = ReviewStatus.DRAFT
+            note = "等待人工审核:新录入题目默认进入审核队列"
+            si.reviewer_note = f"{si.reviewer_note};{note}" if si.reviewer_note else note
+            s_repo.update(si)
+            result.suspicions.append(si.id)
+        elif susp:
             si.review_status = ReviewStatus.DRAFT
             s_repo.update(si)
             result.suspicions.append(si.id)

@@ -5,7 +5,14 @@
 <p class="muted">支持 LaTeX 文本、题图截图、答案与官方解析步骤的混合录入。几何题建议保留原图截图,不要强行文字化。</p>
 <p class="paste-ocr-hint">💡 新增：年份以外的文字输入框，以及题目、答案、官方解析、参考答案文本框均支持 <b>直接 Ctrl+V 粘贴图片并 OCR 识别</b>；“题图/几何图截图”区域也支持 <b>Ctrl+V 直接粘贴截图作为题图上传</b>。</p>
 
-{% if message %}<div class="flag-confirmed">{{ message }}</div>{% endif %}
+{% if message %}
+<div class="flag-confirmed">
+  {{ message }}
+  {% if queued_count and queued_count > 0 %}
+    <br><a class="btn-link" href="/review">去审核队列处理 {{ queued_count }} 条待审解法</a>
+  {% endif %}
+</div>
+{% endif %}
 {% if generated_answer %}
 <div class="flag-confirmed generated-answer-card">
   <b>自动生成答案：</b>{{ generated_answer }}
