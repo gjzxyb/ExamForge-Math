@@ -27,3 +27,40 @@ def test_extracted_solution_rejects_bad_confidence():
             key_steps="", transfer_note="", applicability="",
             confidence=1.5,
         )
+
+
+def test_extracted_solution_accepts_secondary_theorems_empty_string_from_llm():
+    data = {
+        "summary": "思路",
+        "methods": [{
+            "method_name": "分离参数法",
+            "subject_area": "导数",
+            "key_steps": "步骤",
+            "transfer_note": "套路",
+            "applicability": "适用特征",
+            "key_theorem": "",
+            "secondary_theorems": "",
+            "confidence": 0.7,
+        }],
+        "overall_confidence": 0.7,
+    }
+    obj = ExtractedSolution.model_validate(data)
+    assert obj.methods[0].secondary_theorems == []
+
+
+def test_extracted_solution_splits_secondary_theorems_string_from_llm():
+    data = {
+        "summary": "思路",
+        "methods": [{
+            "method_name": "定理法",
+            "subject_area": "导数",
+            "key_steps": "步骤",
+            "transfer_note": "套路",
+            "applicability": "适用特征",
+            "secondary_theorems": "罗尔定理；介值定理\n闭区间最值定理",
+            "confidence": 0.8,
+        }],
+        "overall_confidence": 0.8,
+    }
+    obj = ExtractedSolution.model_validate(data)
+    assert obj.methods[0].secondary_theorems == ["罗尔定理", "介值定理", "闭区间最值定理"]

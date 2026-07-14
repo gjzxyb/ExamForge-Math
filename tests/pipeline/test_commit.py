@@ -48,6 +48,27 @@ def test_commit_writes_embedding_for_confirmed(ctx):
     assert si.embedding_id == vec_id
 
 
+def test_commit_is_idempotent_for_existing_embedding(ctx):
+    si = solution_repo().get(ctx["si_id"])
+    first = commit_solution(
+        si,
+        embedder=MockEmbedder(),
+        vector_repo=vector_repo(),
+        method_repo=method_repo(),
+        solution_repo=solution_repo(),
+    )
+    refreshed = solution_repo().get(ctx["si_id"])
+    second = commit_solution(
+        refreshed,
+        embedder=MockEmbedder(),
+        vector_repo=vector_repo(),
+        method_repo=method_repo(),
+        solution_repo=solution_repo(),
+    )
+    assert second == first
+    assert solution_repo().get(ctx["si_id"]).embedding_id == first
+
+
 def test_commit_skips_draft(tmp_data_dir):
     reset_db_engine_for_tests()
     reset_vector_for_tests()

@@ -55,6 +55,27 @@ async def save_llm(
     return JSONResponse({"ok": True, "redirect": "/settings?saved=llm"})
 
 
+@router.post("/settings/model-control")
+async def save_model_control(
+    enabled: bool = Form(False),
+    agent_md: str = Form(""),
+    skills_enabled: bool = Form(False),
+    skills_md: str = Form(""),
+):
+    """保存全局模型约束与 Skill 指令。
+
+    这些内容会在真实 LLM 调用时追加到 system prompt，用于统一约束
+    模型行为、输出风格和可用技能流程。
+    """
+    get_settings_store().update(model_control={
+        "enabled": enabled,
+        "agent_md": agent_md,
+        "skills_enabled": skills_enabled,
+        "skills_md": skills_md,
+    })
+    return JSONResponse({"ok": True, "redirect": "/settings?saved=model-control"})
+
+
 @router.post("/settings/embedder")
 async def save_embedder(
     backend: str = Form("mock"),
@@ -73,6 +94,25 @@ async def save_embedder(
         "timeout": timeout,
     })
     return JSONResponse({"ok": True, "redirect": "/settings?saved=embedder"})
+
+
+
+
+@router.post("/settings/web-search")
+async def save_web_search(
+    provider: str = Form("mock"),
+    endpoint: str = Form(""),
+    api_key: str = Form(""),
+    timeout: float = Form(20.0),
+):
+    """保存全网搜索 API 配置,用于方法库发现外部方法。"""
+    get_settings_store().update(web_search={
+        "provider": provider,
+        "endpoint": endpoint,
+        "api_key": api_key,
+        "timeout": timeout,
+    })
+    return JSONResponse({"ok": True, "redirect": "/settings?saved=web-search"})
 
 
 @router.post("/settings/ocr")

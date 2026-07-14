@@ -1,21 +1,292 @@
 {% extends "base.html" %}
-{% block title %}录入新题 · ExamForge{% endblock %}
+{% block title %}智能录入新题 · ExamForge{% endblock %}
 {% block body %}
-<h1>录入新题</h1>
+<h1>智能录入新题</h1>
+<p class="muted">支持 LaTeX 文本、题图截图、答案与官方解析步骤的混合录入。几何题建议保留原图截图,不要强行文字化。</p>
+<p class="paste-ocr-hint">💡 新增：年份以外的文字输入框，以及题目、答案、官方解析、参考答案文本框均支持 <b>直接 Ctrl+V 粘贴图片并 OCR 识别</b>；“题图/几何图截图”区域也支持 <b>Ctrl+V 直接粘贴截图作为题图上传</b>。</p>
+
 {% if message %}<div class="flag-confirmed">{{ message }}</div>{% endif %}
 {% if extra_warning %}<div class="flag-suspicious">{{ extra_warning|safe }}</div>{% endif %}
-<form method="post" action="/ingest">
-  <p><label>年份 <input name="year" type="number" required value="2024"></label></p>
-  <p><label>地区 <input name="region" required value="全国甲卷"></label></p>
-  <p><label>板块
-    <select name="subject_area">
-      {% for a in areas %}<option {% if a == "导数" %}selected{% endif %}>{{ a }}</option>{% endfor %}
-    </select>
-  </label></p>
-  <p><label>题干(LaTeX/文本)<br><textarea name="stem" required placeholder="例:设函数 f(x)=x^3-3x, 若对任意实数 x, f(x)≥-a 恒成立, 求 a 的最大值。"></textarea></label></p>
-  <p><label>参考答案(可选)<br><textarea name="reference" placeholder="可留空"></textarea></label></p>
-  <p><label>来源 <input name="source" placeholder="如 2023 全国甲卷"></label></p>
+
+<div class="feature-grid">
+  <section class="feature-card">
+    <h3>公式识别接入</h3>
+    <p>腾讯云数学试题识别接口支持 91 种题型、180 种符号,可直接输出 LaTeX 格式文本。</p>
+    <p>阿里云印刷体公式识别 API 适合试卷/教辅扫描件的题目录入场景。</p>
+    <small>当前页面先接收 OCR 后的 LaTeX 文本;API 密钥可在「设置」中维护。</small>
+  </section>
+  <section class="feature-card">
+    <h3>几何图形保真</h3>
+    <p>几何题、立体几何图、圆锥曲线图建议上传原图截图,形成「图片 + 文字」混合题目卡片。</p>
+    <small>系统保存题图路径到 Problem.image_ref,后续报告/卡片可直接复用。</small>
+  </section>
+  <section class="feature-card">
+    <h3>结构化字段</h3>
+    <p>题目文本、题图、答案、官方解析步骤、所属模块、子知识点、题型标签分栏保存。</p>
+    <small>LLM 管线仍使用题目 LaTeX + 官方解析作为主输入。</small>
+  </section>
+</div>
+
+<form method="post" action="/ingest" enctype="multipart/form-data" class="ingest-form">
+  <fieldset>
+    <legend>基础信息</legend>
+    <div class="form-row">
+      <label>年份 <input name="year" type="number" required value="2024"></label>
+      <label>地区/试卷 <input name="region" required value="全国甲卷" data-paste-ocr="true" data-ocr-label="地区/试卷"></label>
+    </div>
+    <div class="form-row">
+      <label>所属模块
+        <select name="subject_area">
+          {% for a in areas %}<option {% if a == "导数" %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>来源 <input name="source" placeholder="如 2023 全国甲卷" data-paste-ocr="true" data-ocr-label="来源"></label>
+    </div>
+    <div class="form-row">
+      <label>子知识点 <input name="sub_knowledge" placeholder="如 导数-恒成立-分离参数" data-paste-ocr="true" data-ocr-label="子知识点"></label>
+      <label>题型标签 <input name="problem_type_tags" placeholder="如 压轴题,含参不等式,多问" data-paste-ocr="true" data-ocr-label="题型标签"></label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>题目卡片</legend>
+    <p><label>OCR/公式识别来源
+      <select name="ocr_provider">
+        <option value="none">未使用/手工输入</option>
+        <option value="mock">mock 本地演示</option>
+        <option value="tencent_math_ocr">腾讯云数学试题识别</option>
+        <option value="aliyun_printed_formula_ocr">阿里云印刷体公式识别</option>
+      </select>
+    </label></p>
+    <p><label>题目文本(LaTeX)<br>
+      <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴图片会自动 OCR 并插入 LaTeX。</small>
+      <textarea name="stem" required data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="题目文本" placeholder="例:设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, $f(x)\ge -a$ 恒成立, 求 $a$ 的最大值。可直接粘贴文字或图片。"></textarea>
+    </label></p>
+    <p><label>题图/几何图截图<br>
+      <input id="figure-input" name="figure" type="file" accept="image/*">
+    </label></p>
+    <div id="figure-paste-zone" class="figure-paste-zone" tabindex="0" role="button" aria-label="粘贴题图或几何图截图">
+      <b>点击这里后 Ctrl+V 粘贴题图/几何图截图</b>
+      <span>会自动放入上方文件框并随表单提交；适合几何图、圆锥曲线图、立体几何图保留原图。</span>
+      <img id="figure-preview" class="figure-preview" alt="题图预览" hidden>
+    </div>
+    <p id="figure-paste-status" class="muted paste-ocr-status">题图提示:可选择图片文件，也可截图后点击上方区域 Ctrl+V 粘贴。</p>
+    <p>
+      <button type="button" onclick="runOcrPreview()">先识别公式/题目 → 填入 LaTeX</button>
+      <span id="ocr-result" class="muted" style="margin-left:0.8em"></span>
+    </p>
+    <p id="paste-ocr-status" class="muted paste-ocr-status">提示:题目文本、答案、官方解析、参考答案/补充解析均可直接 Ctrl+V 粘贴文字；若粘贴图片会自动调用当前 OCR 来源并插入识别文本。几何图形请仍保留图片上传,避免丢失构型信息。</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>答案与官方解析</legend>
+    <p><label>答案/最终结果<br>
+      <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴答案图片会自动 OCR 并插入。</small>
+      <textarea name="answer" data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="答案/最终结果" placeholder="如 a=2, 或填选择题选项；可直接粘贴文字或答案截图。"></textarea>
+    </label></p>
+    <p><label>官方解析步骤<br>
+      <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴解析图片会自动 OCR 并插入。</small>
+      <textarea name="official_analysis_steps" data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="官方解析步骤" placeholder="按官方解析分步粘贴文字；也可直接粘贴解析图片识别，系统会把它作为 LLM 提炼方法的重要参考。"></textarea>
+    </label></p>
+    <p><label>参考答案/补充解析(可选)<br>
+      <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴参考答案/补充解析图片会自动 OCR 并插入。</small>
+      <textarea name="reference" data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="参考答案/补充解析" placeholder="若已填写官方解析可留空；也可直接粘贴文字、参考答案截图或补充解析图片。"></textarea>
+    </label></p>
+  </fieldset>
+
   <p><button type="submit">提交并跑管线</button></p>
 </form>
 <p style="color:#666">提交后会跑 Ingest→Extract→Classify→Review→Commit。可疑项会出现在 <a href="/review">审核队列</a>。</p>
+
+<script>
+function getSelectedOcrProvider() {
+  const select = document.querySelector('select[name="ocr_provider"]');
+  return select ? select.value : "none";
+}
+
+function setOcrStatus(text, color) {
+  const status = document.getElementById("paste-ocr-status");
+  if (status) {
+    status.textContent = text;
+    status.style.color = color || "#666";
+  }
+}
+
+function insertTextAtCursor(field, text) {
+  const original = field.value || "";
+  const start = typeof field.selectionStart === "number" ? field.selectionStart : original.length;
+  const end = typeof field.selectionEnd === "number" ? field.selectionEnd : original.length;
+  const before = original.slice(0, start);
+  const after = original.slice(end);
+  const needsPrefixNewline = before && !before.endsWith("\n") && !before.endsWith(" ");
+  const needsSuffixNewline = after && !after.startsWith("\n") && !after.startsWith(" ");
+  const insert = (needsPrefixNewline ? "\n" : "") + text + (needsSuffixNewline ? "\n" : "");
+  field.value = before + insert + after;
+  const cursor = (before + insert).length;
+  field.focus();
+  field.setSelectionRange(cursor, cursor);
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+async function recognizeImageFile(file, provider) {
+  const fd = new FormData();
+  fd.append("provider", provider);
+  fd.append("figure", file, file.name || ("pasted-" + Date.now() + ".png"));
+  const res = await fetch("/ingest/ocr", { method: "POST", body: fd });
+  return await res.json();
+}
+
+function requireOcrProvider(resultEl) {
+  const provider = getSelectedOcrProvider();
+  if (provider === "none") {
+    const msg = "请先选择 OCR 来源(mock/腾讯云/阿里云)，再粘贴图片或点击识别";
+    if (resultEl) {
+      resultEl.textContent = msg;
+      resultEl.style.color = "#dc3545";
+    }
+    setOcrStatus(msg, "#dc3545");
+    return null;
+  }
+  return provider;
+}
+
+async function runOcrPreview() {
+  const result = document.getElementById("ocr-result");
+  const fileInput = document.getElementById("figure-input");
+  const stem = document.querySelector('textarea[name="stem"]');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    result.textContent = "请先选择题图/公式图片";
+    result.style.color = "#dc3545";
+    return;
+  }
+  const provider = requireOcrProvider(result);
+  if (!provider) return;
+  result.textContent = "识别中…";
+  result.style.color = "#888";
+  try {
+    const body = await recognizeImageFile(fileInput.files[0], provider);
+    if (!body.ok) {
+      result.textContent = "✗ " + (body.error || "识别失败");
+      result.style.color = "#dc3545";
+      return;
+    }
+    const text = body.latex_text || "";
+    insertTextAtCursor(stem, text);
+    result.textContent = "✓ 已填入 LaTeX · provider=" + body.provider;
+    result.style.color = "#198754";
+  } catch (err) {
+    result.textContent = "✗ " + err;
+    result.style.color = "#dc3545";
+  }
+}
+
+function firstImageFromPaste(event) {
+  const items = event.clipboardData && event.clipboardData.items;
+  if (!items) return null;
+  for (const item of items) {
+    if (item.kind === "file" && item.type && item.type.startsWith("image/")) {
+      return item.getAsFile();
+    }
+  }
+  return null;
+}
+
+
+function setFigureStatus(text, color) {
+  const status = document.getElementById("figure-paste-status");
+  if (status) {
+    status.textContent = text;
+    status.style.color = color || "#666";
+  }
+}
+
+function previewFigureFile(file) {
+  const preview = document.getElementById("figure-preview");
+  if (!preview || !file) return;
+  if (preview.dataset.objectUrl) URL.revokeObjectURL(preview.dataset.objectUrl);
+  const url = URL.createObjectURL(file);
+  preview.src = url;
+  preview.dataset.objectUrl = url;
+  preview.hidden = false;
+}
+
+function setFigureInputFile(file) {
+  const fileInput = document.getElementById("figure-input");
+  if (!fileInput || !file) return false;
+  const suffix = (file.type && file.type.split("/")[1]) || "png";
+  const namedFile = file.name ? file : new File([file], "pasted-figure-" + Date.now() + "." + suffix, { type: file.type || "image/png" });
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(namedFile);
+    fileInput.files = dt.files;
+    previewFigureFile(namedFile);
+    setFigureStatus("✓ 已粘贴题图：" + namedFile.name + "，提交时会作为题图保存", "#198754");
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  } catch (err) {
+    setFigureStatus("✗ 当前浏览器不允许脚本写入文件框，请改用‘选择文件’上传。" + err, "#dc3545");
+    return false;
+  }
+}
+
+function handleFigurePaste(event) {
+  const file = firstImageFromPaste(event);
+  if (!file) return false;
+  event.preventDefault();
+  event.stopPropagation();
+  return setFigureInputFile(file);
+}
+
+function attachFigurePasteUpload() {
+  const zone = document.getElementById("figure-paste-zone");
+  const fileInput = document.getElementById("figure-input");
+  if (!zone || !fileInput) return;
+  zone.addEventListener("click", () => zone.focus());
+  zone.addEventListener("paste", handleFigurePaste);
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files && fileInput.files[0]) {
+      previewFigureFile(fileInput.files[0]);
+      setFigureStatus("✓ 已选择题图：" + fileInput.files[0].name, "#198754");
+    }
+  });
+  document.addEventListener("paste", event => {
+    const active = document.activeElement;
+    const isTextOcrField = active && active.matches && active.matches('[data-paste-ocr="true"]');
+    const isEditable = active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.isContentEditable);
+    if (isTextOcrField || (isEditable && active !== zone)) return;
+    handleFigurePaste(event);
+  });
+}
+
+function attachPasteImageOcr() {
+  document.querySelectorAll('[data-paste-ocr="true"]').forEach(field => {
+    field.addEventListener("paste", async event => {
+      const file = firstImageFromPaste(event);
+      if (!file) return; // 普通文本粘贴保持浏览器默认行为
+      event.preventDefault();
+      const provider = requireOcrProvider();
+      if (!provider) return;
+      const label = field.dataset.ocrLabel || field.name || "文本框";
+      setOcrStatus("正在识别粘贴到「" + label + "」的图片…", "#888");
+      try {
+        const body = await recognizeImageFile(file, provider);
+        if (!body.ok) {
+          setOcrStatus("✗ 「" + label + "」图片识别失败：" + (body.error || "未知错误"), "#dc3545");
+          return;
+        }
+        const text = body.latex_text || "";
+        insertTextAtCursor(field, text);
+        setOcrStatus("✓ 已把图片识别结果插入「" + label + "」 · provider=" + body.provider, "#198754");
+      } catch (err) {
+        setOcrStatus("✗ 「" + label + "」图片识别失败：" + err, "#dc3545");
+      }
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  attachPasteImageOcr();
+  attachFigurePasteUpload();
+});
+</script>
 {% endblock %}

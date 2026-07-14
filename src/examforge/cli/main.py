@@ -35,7 +35,11 @@ def ingest(
     year: int = typer.Option(...),
     region: str = typer.Option(...),
     area: str = typer.Option(...),
-    ref: Path = typer.Option(None, help="参考答案文件路径"),
+    ref: Path = typer.Option(None, help="参考答案/解析文件路径"),
+    answer: str = typer.Option("", help="标准答案/最终结果"),
+    sub_knowledge: str = typer.Option("", help="子知识点"),
+    problem_type_tags: str = typer.Option("", help="题型标签,逗号分隔"),
+    image_ref: str = typer.Option("", help="题图路径或 URL"),
     source: str = "",
 ) -> None:
     """录入一道题(从纯文本文件)。"""
@@ -49,6 +53,11 @@ def ingest(
     p = ingest_problem(
         stem_latex=stem, year=year, region=region,
         subject_area=area, reference_solution=ref_txt,
+        answer=answer or None,
+        official_analysis_steps=ref_txt,
+        sub_knowledge=sub_knowledge,
+        problem_type_tags=problem_type_tags,
+        image_ref=image_ref or None,
         source=source, repo=repo,
     )
     console.print(f"[green]Problem {p.id} fingerprint={p.content_fingerprint}[/]")
@@ -95,6 +104,27 @@ def list_methods(data_dir: Path = Path("data"), area: str = typer.Option(None)) 
     rows = list(s.exec(stmt))
     for m in rows:
         console.print(f"- [{m.status.value}] {m.name} ({m.subject_area.value})")
+
+
+@app.command()
+def serve(
+    data_dir: Path = Path("data"),
+    host: str = typer.Option(
+        "0.0.0.0",
+        help="监听地址；0.0.0.0 表示允许通过本机局域网 IP + 端口访问。",
+    ),
+    port: int = typer.Option(8000, help="监听端口。"),
+    reload: bool = typer.Option(False, help="开发模式自动重载。"),
+) -> None:
+    """启动 Web 服务。默认监听 0.0.0.0,支持局域网 IP 访问。"""
+    import uvicorn
+    from ..web import create_app
+
+    app_obj = create_app(data_dir)
+    console.print(f"[green]ExamForge Web listening on {host}:{port}[/]")
+    if host == "0.0.0.0":
+        console.print("[yellow]可在本机用 http://127.0.0.1:%s 访问；局域网设备请用 http://<本机IP>:%s 访问。[/]" % (port, port))
+    uvicorn.run(app_obj, host=host, port=port, reload=reload)
 
 
 if __name__ == "__main__":

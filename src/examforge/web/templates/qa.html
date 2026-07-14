@@ -2,10 +2,41 @@
 {% block title %}学生问答 · ExamForge{% endblock %}
 {% block body %}
 <h1>学生问答(RAG)</h1>
-<p style="color:#666">回答完全基于方法库(已沉淀的 confirmed 方法 + 例题)。不会凭空编造。</p>
-<form method="post" action="/qa">
+<p style="color:#666">回答完全基于方法库(已沉淀的方法 + 例题)。可自动检索，也可先指定一个方法或该方法下的例题再提问。</p>
+<form method="post" action="/qa" class="qa-form">
+  <section class="detail-card qa-context">
+    <h2>选择提问上下文</h2>
+    <div class="form-row">
+      <label>方法库方法
+        <select name="method_id" id="qa-method-select">
+          <option value="">自动检索最相关方法</option>
+          {% for m in methods %}
+          <option value="{{ m.id }}" {% if selected_method_id==m.id %}selected{% endif %}>
+            {{ m.name }} ({{ m.subject_area }} · {{ m.status }}) — {{ m.count }} 例
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>方法下的例题
+        <select name="problem_id" id="qa-example-select">
+          <option value="">不限定例题</option>
+          {% for e in examples %}
+          <option value="{{ e.problem_id }}" data-method-id="{{ e.method_id }}" {% if selected_problem_id==e.problem_id %}selected{% endif %}>
+            #{{ e.problem_id }} · {{ e.year }} {{ e.region }} · {{ e.method_name }}{% if e.sub_knowledge %} · {{ e.sub_knowledge }}{% endif %} — {{ e.summary }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <p class="muted">
+      选择方法后，RAG 会优先围绕该方法的适用条件、步骤、定理和例题回答；选择例题后，会把该例题题干、答案、官方解析和本方法关键步骤一起作为上下文。
+      {% if not methods %}当前方法库为空，请先录入或初始化方法库。{% endif %}
+      {% if methods and not examples %}当前暂无 confirmed 例题，仍可选择方法提问。{% endif %}
+    </p>
+  </section>
+
   <p><label>问题(贴题或提问)<br>
-    <textarea name="question" required placeholder="例:含参不等式恒成立问题怎么处理?">{{ question or '' }}</textarea>
+    <textarea name="question" required placeholder="例: 这个方法适合什么题？这道例题为什么要分离参数？">{{ question or '' }}</textarea>
   </label></p>
   <button>提交</button>
 </form>
@@ -20,7 +51,40 @@
 {% endif %}
 {% if answer.cited_problem_ids %}
 <h3>引用例题 ID</h3>
-<ul>{% for i in answer.cited_problem_ids %}<li><a href="/methods">#{{ i }}</a></li>{% endfor %}</ul>
+<ul>{% for i in answer.cited_problem_ids %}<li><a href="/problems/{{ i }}">#{{ i }}</a></li>{% endfor %}</ul>
 {% endif %}
 {% endif %}
+
+<script>
+(function () {
+  const methodSelect = document.getElementById('qa-method-select');
+  const exampleSelect = document.getElementById('qa-example-select');
+  if (!methodSelect || !exampleSelect) return;
+
+  function filterExamples() {
+    const methodId = methodSelect.value;
+    let selectedStillVisible = !exampleSelect.value;
+    Array.from(exampleSelect.options).forEach((option) => {
+      if (!option.value) {
+        option.hidden = false;
+        return;
+      }
+      const visible = !methodId || option.dataset.methodId === methodId;
+      option.hidden = !visible;
+      if (visible && option.selected) selectedStillVisible = true;
+    });
+    if (!selectedStillVisible) exampleSelect.value = '';
+  }
+
+  methodSelect.addEventListener('change', filterExamples);
+  exampleSelect.addEventListener('change', () => {
+    const option = exampleSelect.selectedOptions[0];
+    if (option && option.dataset.methodId) {
+      methodSelect.value = option.dataset.methodId;
+      filterExamples();
+    }
+  });
+  filterExamples();
+})();
+</script>
 {% endblock %}

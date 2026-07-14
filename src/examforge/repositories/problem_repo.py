@@ -37,6 +37,10 @@ class ProblemRepo:
         existing.subject_area = problem.subject_area
         existing.stem_latex = problem.stem_latex
         existing.reference_solution = problem.reference_solution
+        existing.answer = problem.answer
+        existing.official_analysis_steps = problem.official_analysis_steps
+        existing.sub_knowledge = problem.sub_knowledge
+        existing.problem_type_tags = problem.problem_type_tags
         existing.source = problem.source
         existing.image_ref = problem.image_ref
         existing.created_at = existing.created_at or datetime.utcnow()

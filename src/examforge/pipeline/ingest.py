@@ -20,6 +20,11 @@ def ingest_problem(
     region: str,
     subject_area: SubjectArea | str,
     reference_solution: str | None = None,
+    answer: str | None = None,
+    official_analysis_steps: str | None = None,
+    sub_knowledge: str = "",
+    problem_type_tags: str = "",
+    image_ref: str | None = None,
     source: str = "",
     repo: ProblemRepo,
 ) -> Problem:
@@ -37,6 +42,11 @@ def ingest_problem(
         subject_area=subject_area,
         stem_latex=stem_latex.strip(),
         reference_solution=reference_solution,
+        answer=answer,
+        official_analysis_steps=official_analysis_steps,
+        sub_knowledge=sub_knowledge.strip(),
+        problem_type_tags=problem_type_tags.strip(),
+        image_ref=image_ref,
         source=source,
         content_fingerprint=fp,
     )

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}全网搜索发现方法 · ExamForge{% endblock %}
+{% block body %}
+<h1>全网搜索发现方法</h1>
+<p><a href="/methods">← 返回方法库</a></p>
+<p class="muted">调用设置中的搜索 API，查找全网公开资料中可用于高中数学压轴题的方法，先作为 candidate 入库，再由教研复核。</p>
+
+<section class="detail-card">
+  <h2>搜索条件</h2>
+  <form method="get" action="/methods/discover" class="discover-form">
+    <div class="form-row">
+      <label>关键词
+        <input name="query" value="{{ query }}" placeholder="如 高中数学 导数 压轴题 先进解法 隐零点法" required>
+      </label>
+      <label>所属板块
+        <select name="area">
+          {% for a in areas %}<option value="{{ a }}" {% if a == area %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>结果数
+        <input type="number" name="max_results" min="1" max="10" value="{{ max_results }}">
+      </label>
+    </div>
+    <button>调用搜索 API</button>
+    <span class="muted">当前 Provider：{{ search_settings.provider }}</span>
+    <a href="/settings#form-web-search" class="muted">配置搜索 API</a>
+  </form>
+</section>
+
+{% if error %}<div class="flag-suspicious">{{ error }}</div>{% endif %}
+
+<section class="detail-card">
+  <h2>候选方法</h2>
+  {% if candidates %}
+  <div class="discovery-list">
+    {% for c in candidates %}
+    <article class="discovery-card">
+      <h3>{{ c.name }} <small class="badge">{{ c.subject_area }}</small>{% if c.exists %} <small class="badge">已存在</small>{% endif %}</h3>
+      <p><b>适用特征：</b>{{ c.applicability }}</p>
+      <p><b>核心思想：</b>{{ c.core_idea }}</p>
+      {% if c.source_url %}<p class="muted">来源：<a href="{{ c.source_url }}" target="_blank" rel="noreferrer">{{ c.source_title or c.source_url }}</a></p>{% endif %}
+      <form method="post" action="/methods/discover/add">
+        <input type="hidden" name="name" value="{{ c.name }}">
+        <input type="hidden" name="subject_area" value="{{ c.subject_area }}">
+        <input type="hidden" name="applicability" value="{{ c.applicability }}">
+        <input type="hidden" name="core_idea" value="{{ c.core_idea }}">
+        <input type="hidden" name="key_theorem" value="{{ c.key_theorem }}">
+        <input type="hidden" name="secondary_theorems" value="{{ c.secondary_theorems }}">
+        <input type="hidden" name="procedure_steps" value="{{ c.procedure_steps }}">
+        <input type="hidden" name="pitfalls" value="{{ c.pitfalls }}">
+        <input type="hidden" name="source_url" value="{{ c.source_url }}">
+        <input type="hidden" name="status" value="candidate">
+        <button>{% if c.exists %}更新已有方法{% else %}加入方法库候选{% endif %}</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% elif query %}
+  <p class="muted">没有发现候选方法，请换关键词或检查搜索 API 配置。</p>
+  {% else %}
+  <p class="muted">输入关键词后开始搜索。建议包含“高中数学 / 高考压轴题 / 板块 / 方法”等关键词。</p>
+  {% endif %}
+</section>
+{% endblock %}

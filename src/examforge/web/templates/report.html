@@ -4,14 +4,22 @@
 <h1>解法专题报告</h1>
 <form method="get" action="/report">
   <p><label>方法
-    <select name="method_id">
+    <select name="method_id" {% if not methods %}disabled{% endif %}>
+      {% if not methods %}
+      <option value="">暂无方法，请先录入题目或初始化方法库</option>
+      {% else %}
       {% for m in methods %}
-      <option value="{{ m.id }}" {% if selected==m.id %}selected{% endif %}>{{ m.name }} ({{ m.subject_area.value }}) — {{ m.count }} 例</option>
+      <option value="{{ m.id }}" {% if selected==m.id %}selected{% endif %}>{{ m.name }} ({{ m.subject_area.value }} · {{ m.status.value }}) — {{ m.count }} 例</option>
       {% endfor %}
+      {% endif %}
     </select>
   </label>
-  <button>生成报告</button></p>
+  <button {% if not methods %}disabled{% endif %}>生成报告</button></p>
 </form>
+
+{% if not methods %}
+<p class="muted">当前数据库中没有任何方法。可先到 <a href="/ingest">智能录入新题</a> 跑管线，或通过初始化脚本加载预置方法。</p>
+{% endif %}
 
 {% if report %}
 <h2>预览</h2>

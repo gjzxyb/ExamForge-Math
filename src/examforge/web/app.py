@@ -48,7 +48,11 @@ def create_app(data_dir: Path) -> FastAPI:
     init_settings_store(data_dir)  # 加载持久化设置
     app = FastAPI(title="ExamForge-Math")
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
+    uploads_dir = data_dir / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
     app.state.data_dir = data_dir
+    app.state.uploads_dir = uploads_dir
     app.state.templates = templates
 
     @app.exception_handler(Exception)

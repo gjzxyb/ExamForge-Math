@@ -6,14 +6,33 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlmodel import Session
 from sqlalchemy import select
 
-from ..deps import get_session_dep, solution_repo_dep, method_repo_dep, problem_repo_dep
+from ..deps import (
+    get_session_dep, solution_repo_dep, method_repo_dep, problem_repo_dep,
+    embedder_dep,
+)
 from ..app import templates
-from ...models import SolutionInstance, ReviewStatus, Problem, Method
+from ...models import SolutionInstance, ReviewStatus, Problem, Method, SubjectArea
 from ...pipeline.review import (
     confirm as pipeline_confirm,
     reject as pipeline_reject,
     revise_method as pipeline_revise,
+    approve_as_new_method as pipeline_approve_new,
 )
+from ...pipeline.commit import commit_solution
+from ...repositories import vector_repo as vector_repo_factory
+
+
+def _commit_reviewed_solution(si, *, embedder, m_repo, s_repo) -> str:
+    """审核动作确认后立即写入方法样本向量，确保方法库/问答可用。"""
+    if si.review_status != ReviewStatus.CONFIRMED:
+        return si.embedding_id or ""
+    return commit_solution(
+        si,
+        embedder=embedder,
+        vector_repo=vector_repo_factory(),
+        method_repo=m_repo,
+        solution_repo=s_repo,
+    )
 
 
 router = APIRouter()
@@ -37,7 +56,6 @@ async def queue(
         llm_subject_area = None
         llm_confidence = None
         try:
-            import json
             raw = json.loads(si.llm_raw) if si.llm_raw else {}
             llm_method_name = raw.get("method_name")
             llm_subject_area = raw.get("subject_area")
@@ -54,7 +72,10 @@ async def queue(
             "llm_subject_area": llm_subject_area,
             "llm_confidence": llm_confidence,
         })
-    return templates.TemplateResponse(request, "review_queue.html", {"items": items})
+    return templates.TemplateResponse(request, "review_queue.html", {
+        "items": items,
+        "areas": [a.value for a in SubjectArea],
+    })
 
 
 @router.post("/review/{si_id}/confirm")
@@ -62,9 +83,11 @@ async def do_confirm(
     si_id: int,
     s_repo=Depends(solution_repo_dep),
     m_repo=Depends(method_repo_dep),
+    embedder=Depends(embedder_dep),
 ):
-    pipeline_confirm(si_id, note="manual-confirm",
-                     solution_repo=s_repo, method_repo=m_repo)
+    si = pipeline_confirm(si_id, note="manual-confirm",
+                          solution_repo=s_repo, method_repo=m_repo)
+    _commit_reviewed_solution(si, embedder=embedder, m_repo=m_repo, s_repo=s_repo)
     return RedirectResponse("/review", status_code=303)
 
 
@@ -83,8 +106,50 @@ async def do_revise(
     si_id: int,
     method_id: int = Form(...),
     s_repo=Depends(solution_repo_dep),
+    m_repo=Depends(method_repo_dep),
+    embedder=Depends(embedder_dep),
 ):
-    pipeline_revise(si_id, method_id=method_id, solution_repo=s_repo)
+    si = pipeline_revise(
+        si_id, method_id=method_id, solution_repo=s_repo, method_repo=m_repo,
+    )
+    _commit_reviewed_solution(si, embedder=embedder, m_repo=m_repo, s_repo=s_repo)
+    return RedirectResponse("/review", status_code=303)
+
+
+@router.post("/review/{si_id}/approve_new")
+async def do_approve_new(
+    si_id: int,
+    name: str = Form(...),
+    subject_area: str = Form(...),
+    applicability: str = Form(""),
+    core_idea: str = Form(""),
+    key_theorem: str = Form(""),
+    secondary_theorems: str = Form(""),
+    procedure_steps: str = Form(""),
+    author_thinking_analysis: str = Form(""),
+    pitfalls: str = Form(""),
+    s_repo=Depends(solution_repo_dep),
+    m_repo=Depends(method_repo_dep),
+    p_repo=Depends(problem_repo_dep),
+    embedder=Depends(embedder_dep),
+):
+    """把 SI 提名的"新方法"手动入库(管理员填描述)。"""
+    si = pipeline_approve_new(
+        si_id,
+        name=name,
+        subject_area=subject_area,
+        applicability=applicability,
+        core_idea=core_idea,
+        key_theorem=key_theorem,
+        secondary_theorems=secondary_theorems,
+        procedure_steps=procedure_steps,
+        author_thinking_analysis=author_thinking_analysis,
+        pitfalls=pitfalls,
+        solution_repo=s_repo,
+        method_repo=m_repo,
+        problem_repo=p_repo,
+    )
+    _commit_reviewed_solution(si, embedder=embedder, m_repo=m_repo, s_repo=s_repo)
     return RedirectResponse("/review", status_code=303)
 
 

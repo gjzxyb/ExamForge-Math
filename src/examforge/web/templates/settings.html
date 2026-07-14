@@ -31,6 +31,34 @@
 
 <hr>
 
+<!-- ============ Model Control / Skills ============ -->
+<h2>模型约束与 Skills</h2>
+<p class="muted">这里可以写类似 <code>AGENT.md</code> 的全局指令，对真实 LLM 的 system prompt 进行统一优化和限制；Skill 内容用于定义可按场景启用的解题/报告/问答流程。不会覆盖各任务的 JSON 输出格式要求。</p>
+<form id="form-model-control" method="post" action="/settings/model-control">
+  <p>
+    <label><input type="checkbox" name="enabled" value="true" {% if s.model_control.enabled %}checked{% endif %}> 启用全局模型约束</label>
+  </p>
+  <p><label>AGENT.md / 模型限制内容<br>
+    <textarea name="agent_md" rows="10" placeholder="例：只依据题目和方法库回答；不确定时说明缺失；输出面向高中数学学习者；禁止编造定理和例题。">{{ s.model_control.agent_md }}</textarea>
+  </label></p>
+  <p>
+    <label><input type="checkbox" name="skills_enabled" value="true" {% if s.model_control.skills_enabled %}checked{% endif %}> 启用 Skill 支持</label>
+  </p>
+  <p><label>Skills Markdown<br>
+    <textarea name="skills_md" rows="12" placeholder="示例：
+## Skill: 方法讲解
+适用：学生询问某个方法或例题。
+流程：先说明适用条件，再讲关键步骤，最后给可迁移检查清单。
+
+## Skill: 公式识别校对
+适用：录入题目后校对 LaTeX。
+流程：保留原图，核对符号、上下标、分式和根号。">{{ s.model_control.skills_md }}</textarea>
+  </label></p>
+  <button>保存模型约束与 Skills</button>
+</form>
+
+<hr>
+
 <!-- ============ Embedder ============ -->
 <h2>嵌入模型(Embedder)</h2>
 <form id="form-embedder" method="post" action="/settings/embedder">
@@ -52,16 +80,42 @@
   <span id="embedder-test-result" style="margin-left:1em"></span>
 </form>
 
+
 <hr>
 
-<!-- ============ OCR (占位) ============ -->
-<h2>公式识别(OCR) <small style="color:#888;font-size:0.7em">— 未来功能,目前只存配置不接实现</small></h2>
+<!-- ============ Web Search ============ -->
+<h2>全网搜索 API</h2>
+<p class="muted">用于方法库页“全网搜索发现方法”。可使用 mock 本地演示，也可配置 SerpAPI、Bing Web Search 或自建搜索代理。</p>
+<form id="form-web-search" method="post" action="/settings/web-search">
+  <p>
+    <label>Provider
+      <select name="provider">
+        <option value="disabled" {% if s.web_search.provider == "disabled" %}selected{% endif %}>disabled(禁用)</option>
+        <option value="mock" {% if s.web_search.provider == "mock" %}selected{% endif %}>mock(本地演示)</option>
+        <option value="serpapi" {% if s.web_search.provider == "serpapi" %}selected{% endif %}>serpapi</option>
+        <option value="bing" {% if s.web_search.provider == "bing" %}selected{% endif %}>bing</option>
+        <option value="custom" {% if s.web_search.provider == "custom" %}selected{% endif %}>custom(自建代理)</option>
+      </select>
+    </label>
+  </p>
+  <p><label>Endpoint <input name="endpoint" value="{{ s.web_search.endpoint }}" placeholder="SerpAPI 可留空；Bing/custom 填 API 地址"></label></p>
+  <p><label>API Key <input name="api_key" type="password" value="{{ s.web_search.api_key }}"></label></p>
+  <p><label>Timeout(秒) <input name="timeout" type="number" step="0.1" value="{{ s.web_search.timeout }}"></label></p>
+  <button>保存全网搜索 API</button>
+</form>
+
+<hr>
+
+<!-- ============ OCR ============ -->
+<h2>公式识别(OCR)</h2>
+<p class="muted">用于 /ingest 页面“先识别公式/题目”按钮。腾讯云/阿里云建议填写已完成厂商签名的代理 Endpoint;本地演示可选 mock。</p>
 <form id="form-ocr" method="post" action="/settings/ocr">
   <p>
     <label>Provider
       <select name="provider">
         <option value="none" {% if s.ocr.provider == "none" %}selected{% endif %}>none(未启用)</option>
-        <option value="tencent" {% if s.ocr.provider == "tencent" %}selected{% endif %}>tencent(腾讯云)</option>
+        <option value="mock" {% if s.ocr.provider == "mock" %}selected{% endif %}>mock(本地演示)</option>
+        <option value="tencent" {% if s.ocr.provider == "tencent" %}selected{% endif %}>tencent(腾讯云数学试题识别)</option>
         <option value="aliyun" {% if s.ocr.provider == "aliyun" %}selected{% endif %}>aliyun(阿里云)</option>
       </select>
     </label>
@@ -69,7 +123,7 @@
   <p><label>Access Key ID <input name="access_key_id" value="{{ s.ocr.access_key_id }}"></label></p>
   <p><label>Access Key Secret <input name="access_key_secret" type="password" value="{{ s.ocr.access_key_secret }}"></label></p>
   <p><label>Region <input name="region" value="{{ s.ocr.region }}"></label></p>
-  <p><label>Endpoint <input name="endpoint" value="{{ s.ocr.endpoint }}"></label></p>
+  <p><label>Endpoint/代理 URL <input name="endpoint" value="{{ s.ocr.endpoint }}" placeholder="如 https://your-cloud-function/ocr"></label></p>
   <button>保存 OCR</button>
 </form>
 

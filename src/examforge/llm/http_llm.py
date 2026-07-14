@@ -4,6 +4,7 @@
 外层 catch 后可降级到 MockLLM 或把错误回传前端。
 """
 
+import json
 import os
 from typing import Any
 import httpx
@@ -16,6 +17,45 @@ DEFAULT_BASE = os.environ.get("EXAMFORGE_LLM_BASE", "https://api.deepseek.com/v1
 DEFAULT_KEY = os.environ.get("EXAMFORGE_LLM_KEY", "")
 DEFAULT_MODEL = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
 
+
+
+
+def _normalize_llm_json_payload(data: Any) -> Any:
+    """兼容真实模型偶发的 schema 小偏差。
+
+    例如 ExtractedSolution.methods[].secondary_theorems 要求数组,但模型常返回
+    空字符串 "" 或用分号/换行拼成字符串。这里在 Pydantic 校验前递归归一化,
+    避免前端 ingest 因可恢复格式问题降级为 mock。
+    """
+    if isinstance(data, dict):
+        normalized = {k: _normalize_llm_json_payload(v) for k, v in data.items()}
+        if "secondary_theorems" in normalized:
+            value = normalized["secondary_theorems"]
+            if value is None or value == "":
+                normalized["secondary_theorems"] = []
+            elif isinstance(value, str):
+                parts: list[str] = []
+                for line in value.replace("\r", "\n").split("\n"):
+                    for part in line.replace("；", ";").replace("，", ",").split(";"):
+                        for sub in part.split(","):
+                            item = sub.strip()
+                            if item:
+                                parts.append(item)
+                normalized["secondary_theorems"] = parts
+        return normalized
+    if isinstance(data, list):
+        return [_normalize_llm_json_payload(item) for item in data]
+    return data
+
+
+def _validate_llm_json(content: str, schema_model: type) -> Any:
+    """解析 LLM JSON，并在校验前做可恢复字段归一化。"""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        # 保留原始错误路径,让 Pydantic 报 JSON 解析错误。
+        return TypeAdapter(schema_model).validate_json(content)
+    return TypeAdapter(schema_model).validate_python(_normalize_llm_json_payload(data))
 
 class LLMHttpError(RuntimeError):
     """HTTP LLM 调不通时抛此异常(替代裸 tenacity.RetryError,语义清晰)。"""
@@ -89,7 +129,7 @@ class HttpLLM:
                         request_url=str(resp.request.url),
                     )
                 content = resp.json()["choices"][0]["message"]["content"]
-                return TypeAdapter(schema_model).validate_json(content)
+                return _validate_llm_json(content, schema_model)
             except LLMHttpError as e:
                 last_err = e
                 # 4xx(认证、参数错)立即失败,不再 retry
@@ -114,21 +154,21 @@ class HttpLLM:
 
     def extract_solution(self, *, stem_latex, reference_solution,
                          taxonomy_hint, subject_area):
-        from .prompts import EXTRACT_SYSTEM, extract_user_prompt
-        sys = EXTRACT_SYSTEM
+        from .prompts import EXTRACT_SYSTEM, apply_model_control, extract_user_prompt
+        sys = apply_model_control(EXTRACT_SYSTEM)
         user = extract_user_prompt(stem_latex, reference_solution, taxonomy_hint, subject_area)
         return self._chat_json(system=sys, user=user, schema_model=ExtractedSolution)
 
     def render_report(self, *, method_name, applicability, core_idea,
                       procedure, pitfalls, examples):
-        from .prompts import REPORT_SYSTEM, report_user_prompt
-        sys = REPORT_SYSTEM
+        from .prompts import REPORT_SYSTEM, apply_model_control, report_user_prompt
+        sys = apply_model_control(REPORT_SYSTEM)
         user = report_user_prompt(method_name, applicability, core_idea,
                                   procedure, pitfalls, examples)
         return self._chat_json(system=sys, user=user, schema_model=ReportedSections)
 
     def answer_question(self, *, question, method_doc, examples):
-        from .prompts import QA_SYSTEM, qa_user_prompt
-        sys = QA_SYSTEM
+        from .prompts import QA_SYSTEM, apply_model_control, qa_user_prompt
+        sys = apply_model_control(QA_SYSTEM)
         user = qa_user_prompt(question, method_doc, examples)
         return self._chat_json(system=sys, user=user, schema_model=QAResult)

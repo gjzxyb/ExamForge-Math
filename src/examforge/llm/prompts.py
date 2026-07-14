@@ -10,6 +10,36 @@ EXTRACT_SYSTEM = """你是高中数学解题方法提炼助手。
 """
 
 
+def apply_model_control(system_prompt: str) -> str:
+    """把设置页中的全局模型约束与 Skill 说明注入 system prompt。
+
+    该函数只追加用户在“设置 → 模型约束与 Skills”中保存的 Markdown，
+    不改变原有任务 JSON schema 约束；若 SettingsStore 未初始化则保持原 prompt。
+    """
+    try:
+        from ..config.settings import get_settings
+        control = get_settings().model_control
+    except Exception:
+        return system_prompt
+
+    blocks = [system_prompt.rstrip()]
+    if control.enabled and control.agent_md.strip():
+        blocks.append(
+            "## 全局模型约束 / AGENT.md\n"
+            "以下内容优先作为行为边界、质量要求和禁止事项执行；"
+            "但不得覆盖本次任务要求的严格 JSON 输出格式。\n"
+            f"{control.agent_md.strip()}"
+        )
+    if control.skills_enabled and control.skills_md.strip():
+        blocks.append(
+            "## 可用 Skills\n"
+            "下面是本系统启用的技能说明。你应先判断任务是否匹配某个 Skill；"
+            "匹配时按 Skill 的流程和约束组织推理与输出；不匹配时忽略。\n"
+            f"{control.skills_md.strip()}"
+        )
+    return "\n\n".join(blocks)
+
+
 def extract_user_prompt(stem: str, reference: str | None,
                         hint_names: list[str], area: str) -> str:
     hint = ", ".join(hint_names) if hint_names else "(无候选)"
@@ -24,8 +54,10 @@ def extract_user_prompt(stem: str, reference: str | None,
 
 请输出 JSON,字段:
 - summary: 整道题的一句话思路综述
-- methods: 列表,每项含 method_name/subject_area/key_steps/transfer_note/applicability/confidence
+- methods: 列表,每项含 method_name/subject_area/key_steps/transfer_note/applicability/key_theorem/secondary_theorems/confidence
 - overall_confidence: 整道题整体置信度
+- 若题中存在比常规方法更关键的定理、推论或二级定理,必须写入 key_theorem / secondary_theorems。
+- key_theorem 没有则填空字符串 ""；secondary_theorems 必须始终是数组,没有则填 []，不要填空字符串。
 """
 
 

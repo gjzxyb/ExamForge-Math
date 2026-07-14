@@ -20,11 +20,21 @@ def test_ingest_creates_new(repo):
         year=2023, region="全国甲卷",
         subject_area=SubjectArea.DERIVATIVE,
         reference_solution="略",
+        answer="a=2",
+        official_analysis_steps="第一步分离参数",
+        sub_knowledge="导数-恒成立",
+        problem_type_tags="压轴题,含参",
+        image_ref="/uploads/demo.png",
         source="试卷",
         repo=repo,
     )
     assert p.id is not None
     assert p.subject_area == SubjectArea.DERIVATIVE
+    assert p.answer == "a=2"
+    assert p.official_analysis_steps == "第一步分离参数"
+    assert p.sub_knowledge == "导数-恒成立"
+    assert p.problem_type_tags == "压轴题,含参"
+    assert p.image_ref == "/uploads/demo.png"
 
 
 def test_ingest_is_idempotent_by_fingerprint(repo):

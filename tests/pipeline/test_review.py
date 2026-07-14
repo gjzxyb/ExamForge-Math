@@ -78,6 +78,20 @@ def test_revise_method_changes_method_and_confirms(ctx):
     assert si.review_status == ReviewStatus.CONFIRMED
 
 
+def test_revise_method_promotes_candidate_when_repo_supplied(ctx):
+    new_m = method_repo().add(Method(
+        name="候选改归并方法", subject_area=SubjectArea.DERIVATIVE,
+        status=MethodStatus.CANDIDATE,
+    ))
+    si = revise_method(
+        ctx["si_id"], new_m.id,
+        solution_repo=solution_repo(), method_repo=method_repo(),
+    )
+    assert si.method_id == new_m.id
+    assert si.review_status == ReviewStatus.CONFIRMED
+    assert method_repo().get(new_m.id).status == MethodStatus.CONFIRMED
+
+
 def test_confirm_unknown_raises(ctx):
     with pytest.raises(NotInReviewQueue):
         confirm(9999, note="x", solution_repo=solution_repo())

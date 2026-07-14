@@ -12,4 +12,8 @@ def test_problem_defaults_and_roundtrip():
     assert p.id is None
     assert p.created_at is not None
     assert p.reference_solution is None
+    assert p.answer is None
+    assert p.official_analysis_steps is None
+    assert p.sub_knowledge == ""
+    assert p.problem_type_tags == ""
     assert isinstance(p.created_at, datetime)

@@ -49,3 +49,43 @@ def test_status_code_meanings_cover_common_codes():
     for code, expected_phrase in cases.items():
         e = LLMHttpError("x", status_code=code, body="b", request_url="http://x/")
         assert expected_phrase in e.as_user_message(), f"code {code} not translated"
+
+
+def test_validate_llm_json_normalizes_secondary_theorems_empty_string():
+    from examforge.llm.http_llm import _validate_llm_json
+    from examforge.llm.schemas import ExtractedSolution
+
+    content = '{"summary":"思路","methods":[{"method_name":"分离参数法","subject_area":"导数","key_steps":"步骤","transfer_note":"套路","applicability":"条件","key_theorem":"","secondary_theorems":"","confidence":0.8}],"overall_confidence":0.8}'
+    out = _validate_llm_json(content, ExtractedSolution)
+    assert out.methods[0].secondary_theorems == []
+
+
+def test_http_llm_chat_json_accepts_real_model_empty_string_secondary_theorems():
+    from examforge.llm.http_llm import HttpLLM
+    from examforge.llm.schemas import ExtractedSolution
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        text = "ok"
+        request = FakeRequest()
+
+        def json(self):
+            return {
+                "choices": [{
+                    "message": {
+                        "content": '{"summary":"思路","methods":[{"method_name":"分离参数法","subject_area":"导数","key_steps":"步骤","transfer_note":"套路","applicability":"条件","key_theorem":"","secondary_theorems":"","confidence":0.8}],"overall_confidence":0.8}'
+                    }
+                }]
+            }
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", max_retries=0)
+    llm._client = FakeClient()
+    out = llm._chat_json(system="s", user="u", schema_model=ExtractedSolution)
+    assert out.methods[0].secondary_theorems == []

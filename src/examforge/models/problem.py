@@ -15,6 +15,10 @@ class Problem(SQLModel, table=True):
     subject_area: SubjectArea = Field(index=True)
     stem_latex: str
     reference_solution: Optional[str] = None
+    answer: Optional[str] = None  # 标准答案/最终结果
+    official_analysis_steps: Optional[str] = None  # 官方解析步骤
+    sub_knowledge: str = ""  # 子知识点,如 导数-恒成立-分离参数
+    problem_type_tags: str = ""  # 题型标签,逗号分隔
     source: str = ""
     content_fingerprint: str = Field(index=True, unique=True)  # SHA-256 前 16 hex
     image_ref: Optional[str] = None  # 图像入口预留,第一版为 None

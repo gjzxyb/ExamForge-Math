@@ -31,6 +31,9 @@ def test_settings_page_renders(client):
     assert "语言模型" in r.text
     assert "Embedder" in r.text
     assert "公式识别" in r.text
+    assert "模型约束与 Skills" in r.text
+    assert "AGENT.md" in r.text
+    assert "全网搜索 API" in r.text
 
 
 def test_settings_save_llm_persists(client):
@@ -67,6 +70,60 @@ def test_settings_save_ocr_persists_without_calling_api(client):
     data = json.loads(settings_path.read_text(encoding="utf-8"))
     assert data["ocr"]["provider"] == "tencent"
     assert data["ocr"]["region"] == "ap-shanghai"
+
+
+
+
+def test_settings_save_web_search_persists(client):
+    r = client.post("/settings/web-search", data={
+        "provider": "custom",
+        "endpoint": "https://search.example/api",
+        "api_key": "search-key",
+        "timeout": "12.5",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    settings_path = client.app.state.data_dir / "settings.json"
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert data["web_search"]["provider"] == "custom"
+    assert data["web_search"]["endpoint"] == "https://search.example/api"
+    assert data["web_search"]["api_key"] == "search-key"
+    assert data["web_search"]["timeout"] == 12.5
+
+def test_settings_save_model_control_and_skills_persists(client):
+    r = client.post("/settings/model-control", data={
+        "enabled": "true",
+        "agent_md": "只依据方法库回答；禁止编造定理。",
+        "skills_enabled": "true",
+        "skills_md": "## Skill: 方法讲解\n先讲条件，再讲步骤。",
+    }, follow_redirects=False)
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    settings_path = client.app.state.data_dir / "settings.json"
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert data["model_control"]["enabled"] is True
+    assert "禁止编造定理" in data["model_control"]["agent_md"]
+    assert data["model_control"]["skills_enabled"] is True
+    assert "Skill: 方法讲解" in data["model_control"]["skills_md"]
+
+
+def test_model_control_is_injected_into_system_prompt(client):
+    client.post("/settings/model-control", data={
+        "enabled": "true",
+        "agent_md": "回答必须列出依据。",
+        "skills_enabled": "true",
+        "skills_md": "## Skill: 例题讲解\n使用条件-步骤-验证结构。",
+    })
+    from examforge.llm.prompts import apply_model_control
+
+    prompt = apply_model_control("BASE SYSTEM")
+    assert "BASE SYSTEM" in prompt
+    assert "全局模型约束" in prompt
+    assert "回答必须列出依据" in prompt
+    assert "可用 Skills" in prompt
+    assert "Skill: 例题讲解" in prompt
 
 
 def test_settings_test_llm_with_mock_succeeds(client):

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}例题 #{{ problem.id }} · ExamForge{% endblock %}
+{% block body %}
+<p><a href="/methods">← 返回方法库</a></p>
+<h1>例题 #{{ problem.id }}</h1>
+<p class="muted">{{ problem.year }} · {{ problem.region }} · {{ problem.subject_area.value }}{% if problem.sub_knowledge %} · {{ problem.sub_knowledge }}{% endif %}{% if problem.problem_type_tags %} · {{ problem.problem_type_tags }}{% endif %}</p>
+
+<section class="detail-card">
+  <h2>题目文本（LaTeX）</h2>
+  <pre>{{ problem.stem_latex }}</pre>
+  {% if problem.image_ref %}
+  <h3>题图</h3>
+  <img class="problem-image" src="{{ problem.image_ref }}" alt="题图">
+  {% endif %}
+</section>
+
+<section class="detail-card">
+  <h2>答案与官方解析</h2>
+  <p><b>答案：</b>{{ problem.answer or "—" }}</p>
+  <h3>官方解析步骤</h3>
+  <pre>{{ problem.official_analysis_steps or problem.reference_solution or "—" }}</pre>
+</section>
+
+<section class="detail-card">
+  <h2>已确认解法实例</h2>
+  {% if solutions %}
+  {% for item in solutions %}
+  <article class="solution-card">
+    <h3>{% if item.method %}<a href="/methods/{{ item.method.id }}">{{ item.method.name }}</a>{% else %}未知方法{% endif %}</h3>
+    <p><b>关键步骤：</b></p>
+    <pre>{{ item.si.key_steps }}</pre>
+    <p><b>迁移提示：</b>{{ item.si.transfer_note or "—" }}</p>
+    {% if item.si.reviewer_note %}<p class="muted">审核备注：{{ item.si.reviewer_note }}</p>{% endif %}
+  </article>
+  {% endfor %}
+  {% else %}
+  <p class="muted">暂无已确认解法实例。</p>
+  {% endif %}
+</section>
+{% endblock %}

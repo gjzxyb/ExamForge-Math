@@ -72,6 +72,53 @@
       <button>↻ 改归并</button>
     </form>
   </p>
+
+  <details>
+    <summary><b>+ 批准为新方法(填描述入库)</b></summary>
+    <form method="post" action="/review/{{ it.si.id }}/approve_new" style="margin-top:0.4em">
+      <p>
+        <label>方法名
+          <input name="name" required value="{{ it.llm_method_name or '' }}" style="width:20em">
+        </label>
+        <label>板块
+          <select name="subject_area">
+            {% for a in areas %}
+            <option value="{{ a }}" {% if (it.llm_subject_area and it.llm_subject_area == a) or (not it.llm_subject_area and a == it.problem.subject_area.value) %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </p>
+      <p><label>适用特征(一句话讲清什么题该用)
+        <input name="applicability" style="width:100%" value="{{ it.si.transfer_note or '' }}">
+      </label></p>
+      <p><label>核心思想
+        <input name="core_idea" style="width:100%">
+      </label></p>
+      <p><label>关键定理/更优定理(可选)
+        <input name="key_theorem" style="width:100%" placeholder="如 拉格朗日中值定理：把函数差转化为某点导数">
+      </label></p>
+      <p><label>二级定理/推论/常用结论(可选,多条可换行或分号分隔)
+        <textarea name="secondary_theorems" style="width:100%;min-height:4em" placeholder="如 罗尔定理
+导数零点与单调性分段结论"></textarea>
+      </label></p>
+      <p><label>通用步骤
+        <input name="procedure_steps" style="width:100%">
+      </label></p>
+      <p><label>出题人思维分析(可选)
+        <textarea name="author_thinking_analysis" style="width:100%;min-height:4em" placeholder="分析命题意图、能力考查、设陷方式与破题突破口"></textarea>
+      </label></p>
+      <p><label>常见坑
+        <input name="pitfalls" style="width:100%">
+      </label></p>
+      <p>
+        <small style="color:#888">
+          ⚠ 重名检查:若同名方法在所选板块已存在,系统会直接挂到那个方法(不会重复创建)。
+          若 LLM 给的板块不在枚举里,会 fallback 到题目自身板块 {{ it.problem.subject_area.value }}。
+        </small>
+      </p>
+      <button type="submit">✓ 批准为新方法并入 confirmed 库</button>
+    </form>
+  </details>
 </div>
 {% endfor %}
 

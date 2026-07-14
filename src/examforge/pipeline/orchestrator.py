@@ -61,36 +61,37 @@ def run_pipeline(
     result = RunResult(problem_id=problem.id)
     result.llm_backend_used = getattr(llm, "effective_backend", "unknown")
 
-    # LLM 调用保护:若 http 后端实际失败,降级 mock 重跑一次
-    if fail_open and result.llm_backend_used.startswith("http"):
-        try:
-            # 试探一次
-            llm.extract_solution(
-                stem_latex=problem.stem_latex,
-                reference_solution=problem.reference_solution,
-                taxonomy_hint=provider.list_names(str(problem.subject_area.value)),
-                subject_area=str(problem.subject_area.value),
-            )
-        except Exception as e:
-            # 取用户友好消息
-            from ..llm.http_llm import LLMHttpError
-            if isinstance(e, LLMHttpError):
-                result.llm_error = e.as_user_message()
-            else:
-                result.llm_error = f"{type(e).__name__}: {e}"
-            warnings.warn(
-                f"LLM http 调失败,降级为 mock: {result.llm_error}", stacklevel=2,
-            )
-            llm = _make_mock_llm()
-            llm.effective_backend = "mock_fallback"
-            result.llm_backend_used = "mock_fallback"
-
     def add_si(si):
         s_repo.add(si)
         return s_repo.get(si.id) or si
 
-    drafts = extract(problem, llm=llm, taxonomy_provider=provider,
-                     solution_add=add_si)
+    def _friendly_llm_error(exc: Exception) -> str:
+        from ..llm.http_llm import LLMHttpError
+        if isinstance(exc, LLMHttpError):
+            msg = exc.as_user_message() or str(exc)
+        else:
+            msg = f"{type(exc).__name__}: {exc}"
+        if "timed out" in msg.lower() or "timeout" in msg.lower() or "超时" in msg:
+            msg += "；建议在设置中增大 LLM Timeout，或检查 Base URL/网络连通性。"
+        return msg
+
+    # LLM 调用保护：直接执行 Extract；若 http 后端在真实调用中超时/断连/格式异常，
+    # 立即降级 mock 重跑一次。旧逻辑先“试探一次”再正式 Extract，会导致第二次
+    # 真实调用仍可能超时并冒泡到前端；这里改为只调用一次真实 LLM。
+    try:
+        drafts = extract(problem, llm=llm, taxonomy_provider=provider,
+                         solution_add=add_si)
+    except Exception as exc:
+        if not fail_open or not result.llm_backend_used.startswith("http"):
+            raise
+        result.llm_error = _friendly_llm_error(exc)
+        warnings.warn(
+            f"LLM http 调失败,降级为 mock: {result.llm_error}", stacklevel=2,
+        )
+        llm = _make_mock_llm()
+        result.llm_backend_used = "mock_fallback"
+        drafts = extract(problem, llm=llm, taxonomy_provider=provider,
+                         solution_add=add_si)
 
     if len(drafts) > config.max_methods_per_problem:
         # 全部转可疑(超阈)

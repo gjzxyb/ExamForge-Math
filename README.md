@@ -23,7 +23,9 @@ uv run examforge run --problem-id 1      # 对已录入题单独跑管线
 
 ```bash
 uv run python -c "from examforge.web import create_app; create_app('data')"   # 仅作检查
-uv run uvicorn examforge.web:create_app --factory --host 127.0.0.1 --port 8000 --app-dir src
+uv run examforge serve --host 0.0.0.0 --port 8000
+# 或直接用 uvicorn:
+# uv run uvicorn asgi:app --host 0.0.0.0 --port 8000 --app-dir src
 ```
 
 启动后访问:
@@ -32,8 +34,9 @@ uv run uvicorn examforge.web:create_app --factory --host 127.0.0.1 --port 8000 -
 |---|---|
 | `GET /` | 首页(统计) |
 | `GET /healthz` | 健康检查 |
-| `GET /ingest` | 题目录入表单 |
-| `POST /ingest` | 提交并跑端到端管线 |
+| `GET /ingest` | 智能题目录入表单(LaTeX、题图、答案、官方解析、标签) |
+| `POST /ingest/ocr` | 上传题图/公式图,先做 OCR 识别并返回 LaTeX 文本 |
+| `POST /ingest` | 提交结构化题目并跑端到端管线 |
 | `GET /methods` | 方法库列表(可按板块/状态筛) |
 | `GET /methods/{id}` | 方法详情 + 已有例题 |
 | `GET /review` | 审核队列 |
@@ -50,9 +53,13 @@ uv run uvicorn examforge.web:create_app --factory --host 127.0.0.1 --port 8000 -
 | `POST /settings/test-llm` | 测试当前 LLM 是否可用 |
 | `POST /settings/test-embedder` | 测试当前 Embedder 是否可用 |
 
-**运行时配置**:打开 `http://127.0.0.1:8000/settings` 填入 DeepSeek key 等,
-保存后立即生效(下次 LLM/Embedder 调用即读到新值),
+**访问方式**:`serve` 默认可被局域网访问。Windows 下可用 `ipconfig` 查看本机 IPv4 地址,然后在其它设备访问 `http://<本机IP>:8000`。本机仍可访问 `http://127.0.0.1:8000`。如果局域网仍无法访问,请检查 Windows 防火墙是否放行 Python/8000 端口。
+
+**运行时配置**:打开 `http://<本机IP>:8000/settings` 或 `http://127.0.0.1:8000/settings` 填入 DeepSeek key、Embedder、OCR 等,
+保存后立即生效(下次 LLM/Embedder/OCR 调用即读到新值),
 并持久化到 `data/settings.json`。环境变量仍可作为启动初始值。
+
+**智能录入**:公式识别支持 `mock` 本地演示,以及 `tencent`/`aliyun` 兼容代理模式。腾讯云数学试题识别、阿里云印刷体公式识别通常需要厂商签名,推荐在 `OCR Endpoint` 后接云函数/代理完成签名,本应用负责上传图片并解析返回的 LaTeX 文本。几何题建议保留原图截图,系统会把图片路径保存到 `Problem.image_ref`,形成“图片 + 文字”的混合题目卡片。
 
 ## 测试
 
@@ -68,6 +75,8 @@ uv run python tests/acceptance/run_eval.py   # 黄金集评估
 - `EXAMFORGE_EMBED_BACKEND` ∈ {`mock`, `http`}  默认 `mock`
 - `EXAMFORGE_LLM_BASE` / `EXAMFORGE_LLM_KEY` / `EXAMFORGE_LLM_MODEL` (默认 DeepSeek)
 - `EXAMFORGE_EMBED_BASE` / `EXAMFORGE_EMBED_KEY` / `EXAMFORGE_EMBED_MODEL`
+- `EXAMFORGE_OCR_PROVIDER` ∈ {`none`, `mock`, `tencent`, `aliyun`}
+- `EXAMFORGE_OCR_KEY_ID` / `EXAMFORGE_OCR_KEY_SECRET` / `EXAMFORGE_OCR_REGION` / `EXAMFORGE_OCR_ENDPOINT`
 
 ## 真实 API(可选)
 

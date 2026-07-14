@@ -1,7 +1,61 @@
 {% extends "base.html" %}
 {% block title %}方法库 · ExamForge{% endblock %}
 {% block body %}
-<h1>方法库</h1>
+<div class="page-title-row">
+  <div>
+    <h1>方法库</h1>
+    <p class="muted">浏览、筛选和维护已沉淀的高中数学解题方法。</p>
+  </div>
+  <div class="title-actions">
+    <a class="button-link secondary-action" href="/methods/discover">全网搜索发现方法</a>
+    <button type="button" class="primary-action" id="open-method-create">+ 手动添加方法</button>
+  </div>
+</div>
+
+<dialog id="method-create-dialog" class="method-create-dialog">
+  <div class="dialog-header">
+    <div>
+      <h2>手动添加方法</h2>
+      <p class="muted">教研人员可直接把成熟方法录入方法库。默认按 confirmed 入库，后续可在详情页被报告、问答和例题引用。</p>
+    </div>
+    <button type="button" class="dialog-close" id="close-method-create" aria-label="关闭">×</button>
+  </div>
+  <form method="post" action="/methods" class="method-create-form">
+    <div class="form-row">
+      <label>方法名称 <input name="name" required placeholder="如：分离参数法"></label>
+      <label>所属板块
+        <select name="subject_area">
+          {% for a in areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>状态
+        <select name="status">
+          {% for st in statuses %}<option value="{{ st }}" {% if st == "confirmed" %}selected{% endif %}>{{ st }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>适用条件 / 方法实施条件<textarea name="applicability" rows="4" placeholder="逐条写清什么题型、结构或条件下可用"></textarea></label>
+      <label>核心思想<textarea name="core_idea" rows="4" placeholder="说明关键转化、核心定理或突破口"></textarea></label>
+    </div>
+    <div class="form-row">
+      <label>关键定理 / 更优定理<textarea name="key_theorem" rows="3" placeholder="如：零点存在定理：连续函数两端异号..."></textarea></label>
+      <label>二级定理 / 推论<textarea name="secondary_theorems" rows="3" placeholder="一行一个，如：介值定理
+闭区间连续函数最值定理"></textarea></label>
+    </div>
+    <label>通用解题步骤<textarea name="procedure_steps" rows="5" placeholder="1. 识别结构
+2. 关键转化
+3. 运算推进
+4. 回代验证"></textarea></label>
+    <label>出题人思维分析<textarea name="author_thinking_analysis" rows="5" placeholder="分析命题意图、能力考查、常见设陷、突破口。例如：命题人通常把参数范围藏在端点与等号条件中，考查学生是否能先分离参数再求函数最值。"></textarea></label>
+    <label>常见坑<textarea name="pitfalls" rows="4" placeholder="如：忽略定义域；忘记验证等号；图形约束被代数化后丢失"></textarea></label>
+    <div class="dialog-actions">
+      <button type="button" id="cancel-method-create">取消</button>
+      <button>添加到方法库</button>
+    </div>
+  </form>
+</dialog>
+
 <form method="get" action="/methods">
   <label>板块 <select name="area">
     <option value="">全部</option>
@@ -28,4 +82,23 @@
   <tr><td colspan="4" style="color:#666">无匹配方法</td></tr>
   {% endfor %}
 </table>
+
+<script>
+(() => {
+  const dialog = document.getElementById('method-create-dialog');
+  const openBtn = document.getElementById('open-method-create');
+  const closeBtns = [document.getElementById('close-method-create'), document.getElementById('cancel-method-create')];
+  if (!dialog || !openBtn) return;
+  openBtn.addEventListener('click', () => {
+    if (typeof dialog.showModal === 'function') dialog.showModal();
+    else dialog.setAttribute('open', 'open');
+  });
+  closeBtns.forEach((btn) => btn && btn.addEventListener('click', () => dialog.close ? dialog.close() : dialog.removeAttribute('open')));
+  dialog.addEventListener('click', (event) => {
+    const rect = dialog.getBoundingClientRect();
+    const inDialog = rect.top <= event.clientY && event.clientY <= rect.bottom && rect.left <= event.clientX && event.clientX <= rect.right;
+    if (!inDialog) dialog.close ? dialog.close() : dialog.removeAttribute('open');
+  });
+})();
+</script>
 {% endblock %}

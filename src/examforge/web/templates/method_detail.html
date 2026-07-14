@@ -1,32 +1,220 @@
 {% extends "base.html" %}
 {% block title %}{{ method.name }} · 方法详情{% endblock %}
 {% block body %}
-<h1>{{ method.name }} <small style="font-size:0.5em;color:#666">[{{ method.status.value }} · {{ method.subject_area.value }}]</small></h1>
+<h1>{{ method.name }} <small class="muted">[{{ method.status.value }} · {{ method.subject_area.value }}]</small></h1>
+<p><a href="/methods">← 返回方法库</a></p>
 
-<h3>适用特征</h3>
-<p>{{ method.applicability or "—" }}</p>
-<h3>核心思想</h3>
-<p>{{ method.core_idea or "—" }}</p>
-<h3>通用步骤</h3>
-<pre>{{ method.procedure_steps or "—" }}</pre>
-<h3>常见坑</h3>
-<p>{{ method.pitfalls or "—" }}</p>
+<section class="method-hero">
+  <div>
+    <h2>方法价值</h2>
+    <p>{{ method.core_idea or method.applicability or "该方法已收录，后续可通过例题与审核样本持续补充。" }}</p>
+  </div>
+  <div class="stat-card">
+    <b>{{ examples|length }}</b>
+    <span>已确信例题</span>
+  </div>
+</section>
 
-<h3>已确认例题 ({{ examples|length }})</h3>
-{% if examples %}
-<table>
-  <tr><th>ID</th><th>年份</th><th>地区</th><th>摘要</th></tr>
-  {% for e in examples %}
-  <tr>
-    <td>#{{ e.id }}</td>
-    <td>{{ e.year }}</td>
-    <td>{{ e.region }}</td>
-    <td>{{ e.summary }}</td>
-  </tr>
-  {% endfor %}
-</table>
-{% else %}
-<p style="color:#666">暂无 confirmed 例题。更多例题收录后会出现在此。</p>
-{% endif %}
+<section class="detail-card confidence-card">
+  <h2>置信度标注</h2>
+  <p class="muted">每条“通用解法”都标注覆盖样本和反例情况，避免把少量经验过度泛化。</p>
+  <div class="confidence-grid">
+    <div><b>{{ confidence_annotation.level }}</b><span>泛化置信度</span></div>
+    <div><b>{{ confidence_annotation.confirmed_count }}</b><span>覆盖历史题</span></div>
+    <div><b>{{ confidence_annotation.rejected_count }}</b><span>反例/拒绝样本</span></div>
+    <div><b>{{ confidence_annotation.avg_confidence if confidence_annotation.avg_confidence is not none else "-" }}</b><span>样本平均置信</span></div>
+  </div>
+  <p>{{ confidence_annotation.warning }}</p>
+  {% if confidence_annotation.counterexamples %}
+  <h3>反例情况</h3>
+  <ul>
+    {% for c in confidence_annotation.counterexamples %}<li>例题 #{{ c.problem_id }}：{{ c.reason }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">当前方法暂无明确反例；后续审核拒绝样本会进入负例知识库。</p>
+  {% endif %}
+</section>
+
+<div class="detail-grid">
+  <section class="detail-card">
+    <h2>实现该方法的条件</h2>
+    <p class="muted">做题时先逐条核对，条件满足再套用，避免“看起来像”但关键约束不成立。</p>
+    <ol class="check-list">
+      {% for c in conditions %}<li>{{ c }}</li>{% endfor %}
+    </ol>
+  </section>
+
+  <section class="detail-card">
+    <h2>核心思想</h2>
+    {% if core_points %}
+    <ul>{% for item in core_points %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">暂无核心思想说明，可在方法审核入库时补充。</p>{% endif %}
+  </section>
+</div>
+
+<section class="detail-card">
+  <h2>关键定理与二级定理</h2>
+  <p class="muted">若例题或方法维护中识别出更优定理、二级定理、推论或常用结论，会在这里集中展示，便于优先调用与学习迁移。</p>
+  {% if theorems %}
+  <div class="theorem-list">
+    {% for t in theorems %}
+    <article class="theorem-card">
+      <h3><span class="badge">{{ t.level }}</span> {{ t.name }}</h3>
+      {% if t.statement and t.statement != t.name %}<p>{{ t.statement }}</p>{% endif %}
+      <p class="muted">来源：{{ t.source }}{% if t.example_id %} · <a href="/problems/{{ t.example_id }}">打开对应例题</a>{% endif %}</p>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">当前方法暂未标注关键定理或二级定理；后续在审核入库或例题解析中补充后会自动显示。</p>
+  {% endif %}
+</section>
+
+<section class="detail-card">
+  <h2>通用解题步骤</h2>
+  {% if procedure_steps %}
+  <ol class="step-list">{% for step in procedure_steps %}<li>{{ step }}</li>{% endfor %}</ol>
+  {% else %}<p class="muted">暂无通用步骤。建议补充“识别结构 → 关键转化 → 运算推进 → 结果验证”。</p>{% endif %}
+</section>
+
+<section class="detail-card">
+  <h2>讲解风格适配</h2>
+  <p class="muted">同一方法卡片按不同学习者需求输出三种版本：先懂直觉，再补严谨，最后形成记忆抓手。</p>
+  <div class="style-grid">
+    {% for style in explanation_styles %}
+    <article class="style-card">
+      <h3>{{ style.name }}</h3>
+      <p>{{ style.summary }}</p>
+      <ul>{% for item in style.points %}<li>{{ item }}</li>{% endfor %}</ul>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="detail-card author-thinking-card">
+  <h2>出题人思维分析</h2>
+  <p class="muted">从命题角度反推：题目为什么要这样设条件、想考什么能力、可能在哪里设陷，以及学习者应如何找到突破口。</p>
+  {% if author_thinking.manual %}
+  <div class="highlight-box">
+    <h3>人工维护分析</h3>
+    <ul>{% for item in author_thinking.manual %}<li>{{ item }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  <div class="detail-grid compact">
+    <div>
+      <h3>命题意图</h3>
+      <ul>{% for item in author_thinking.intent %}<li>{{ item }}</li>{% endfor %}</ul>
+    </div>
+    <div>
+      <h3>设陷方式</h3>
+      <ul>{% for item in author_thinking.traps %}<li>{{ item }}</li>{% endfor %}</ul>
+    </div>
+    <div>
+      <h3>破题观察</h3>
+      <ul>{% for item in author_thinking.breakthrough %}<li>{{ item }}</li>{% endfor %}</ul>
+    </div>
+  </div>
+</section>
+
+<section class="detail-card error-graph-card">
+  <h2>错因图谱 / 负例知识库</h2>
+  <p class="muted">不仅记录“怎么解对”，也沉淀“容易错在哪一步”。审核拒绝样本、方法坑点和例题中的 common_errors 会汇总到这里。</p>
+  <div class="error-node-list">
+    {% for node in error_graph.nodes %}
+    <article class="error-node">
+      <h3>{{ node.step }}</h3>
+      <p><b>易错表现：</b>{{ node.error }}</p>
+      <p><b>纠偏动作：</b>{{ node.fix }}</p>
+      <p class="muted">来源：{{ node.source }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="detail-card trend-card">
+  <h2>跨年对比：近 5-10 年趋势</h2>
+  <p class="muted">基于当前方法已确信例题的年份和知识点标签，判断方法是否持续有效、是否出现“升级版”定理或新包装。</p>
+  <p><b>趋势判断：</b>{{ cross_year_trend.status }}</p>
+  <ul>{% for item in cross_year_trend.bullets %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% if cross_year_trend.years %}<p class="muted">命中年份：{{ cross_year_trend.years|join("、") }}</p>{% endif %}
+</section>
+
+<section class="detail-card">
+  <h2>常见坑与验证清单</h2>
+  <div class="detail-grid compact">
+    <div>
+      <h3>易错点</h3>
+      {% if pitfalls %}<ul>{% for p in pitfalls %}<li>{{ p }}</li>{% endfor %}</ul>{% else %}<p class="muted">暂无专项易错点。</p>{% endif %}
+    </div>
+    <div>
+      <h3>方法应证</h3>
+      <ul>
+        <li>回到原题条件检查定义域、参数范围、图形约束是否被完整保留。</li>
+        <li>核对等号成立、端点值、特殊值或边界情形。</li>
+        <li>若有例题，打开已确信例题对照“条件 → 步骤 → 结论”的闭环。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="detail-card">
+  <h2>方法变式：举一反三</h2>
+  <p class="muted">用变式拓展思维面：不是机械背步骤，而是识别同一核心转化在不同题面下的形态。</p>
+  <div class="variant-grid">
+    {% for v in variants %}
+    <article class="variant-card">
+      <h3>{{ v.title }}</h3>
+      <p><b>变式焦点：</b>{{ v.focus }}</p>
+      <p><b>适用场景：</b>{{ v.use_when }}</p>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="variant-generator">
+    <h3>变式生成器：反向生成自测题</h3>
+    <p class="muted">基于提炼出的方法模板，生成同类型变式题；做完后用“适用条件 → 关键步骤 → 边界验证”检查是否真正掌握。</p>
+    <form method="get" action="/methods/{{ method.id }}" class="inline-form">
+      <input type="hidden" name="generate_variants" value="1">
+      <label>数量 <input type="number" name="variant_count" value="3" min="1" max="5"></label>
+      <button>生成自测变式题</button>
+    </form>
+    {% if show_generated_variants %}
+    <div class="generated-variant-list">
+      {% for v in generated_variants %}
+      <article class="generated-variant-card">
+        <h4>{{ v.title }} <small class="badge">{{ v.difficulty }}</small></h4>
+        <p class="stem-preview">{{ v.stem }}</p>
+        <p><b>模板来源：</b>{{ v.template_source }}</p>
+        <p><b>自检点：</b>{{ v.self_check }}</p>
+        <p><b>作答要求：</b>{{ v.requirements }}</p>
+      </article>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="detail-card">
+  <h2>已确信例题 ({{ examples|length }})</h2>
+  {% if examples %}
+  <div class="example-list">
+    {% for e in examples %}
+    <article class="example-card">
+      <h3><a href="/problems/{{ e.id }}">#{{ e.id }} · {{ e.year }} {{ e.region }}</a></h3>
+      <p class="muted">{{ e.sub_knowledge or "未标注子知识点" }}{% if e.problem_type_tags %} · {{ e.problem_type_tags }}{% endif %}</p>
+      {% if e.image_ref %}<p><img class="thumb" src="{{ e.image_ref }}" alt="题图"></p>{% endif %}
+      <p class="stem-preview">{{ e.stem_latex[:180] }}{% if e.stem_latex|length > 180 %}…{% endif %}</p>
+      {% if e.answer %}<p><b>答案：</b>{{ e.answer }}</p>{% endif %}
+      <p><b>本题关键演绎：</b>{{ e.key_steps[:160] }}{% if e.key_steps|length > 160 %}…{% endif %}</p>
+      <p><b>迁移提示：</b>{{ e.transfer_note or e.summary }}</p>
+      <p><a class="button-link" href="/problems/{{ e.id }}">打开例题详情 →</a></p>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">暂无 confirmed 例题。审核队列确认后的样本会自动出现在这里。</p>
+  {% endif %}
+</section>
+
 <p><a href="/methods">← 返回方法库</a></p>
 {% endblock %}

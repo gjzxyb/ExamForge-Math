@@ -55,3 +55,27 @@ def test_answer_returns_qa_result_with_cited_methods(ctx):
     assert r.answer  # 至少返回了字符串
     assert isinstance(r.cited_method_names, list)
     assert isinstance(r.cited_problem_ids, list)
+
+
+def test_answer_can_use_selected_method_and_example_context(ctx):
+    from examforge.repositories import get_session
+    from sqlmodel import select
+
+    s = get_session()
+    method = s.exec(select(Method).where(Method.name == "分离参数法")).first()
+    problem = s.exec(select(Problem).where(Problem.region == "A")).first()
+    assert method is not None
+    assert problem is not None
+
+    r = answer(
+        "请结合这个例题说明分离参数法的关键步骤。",
+        session=s,
+        llm=MockLLM(),
+        embedder=MockEmbedder(),
+        config=PipelineConfig(),
+        method_id=method.id,
+        problem_id=problem.id,
+    )
+    assert "分离参数法" in r.cited_method_names
+    assert problem.id in r.cited_problem_ids
+    assert "分离参数法" in r.answer
