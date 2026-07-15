@@ -28,7 +28,8 @@ def _fallback_llm():
                 stacklevel=2,
             )
             return MockLLM()
-        return HttpLLM(base_url=base, api_key=key, model=model)
+        timeout = os.environ.get("EXAMFORGE_LLM_TIMEOUT", "180")
+        return HttpLLM(base_url=base, api_key=key, model=model, timeout=timeout)
     raise ValueError(f"未知 LLM backend: {backend!r}")
 
 

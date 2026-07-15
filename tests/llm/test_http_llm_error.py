@@ -120,4 +120,23 @@ def test_llm_http_error_includes_request_error_message_without_status():
     msg = e.as_user_message()
     assert "URL:" in msg
     assert "LLM 请求超时" in msg
-    assert "Timeout" in msg
+    assert "超时" in msg
+
+
+def test_http_llm_uses_minimum_timeout_for_long_real_calls():
+    from examforge.llm.http_llm import HttpLLM
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", timeout=30, max_retries=0)
+    assert llm.configured_timeout == 30
+    assert llm.timeout >= 180
+
+
+def test_llm_http_timeout_message_mentions_effective_timeout():
+    e = LLMHttpError(
+        "LLM 请求超时: The read operation timed out",
+        request_url="https://api.deepseek.com/v1/chat/completions",
+        timeout_seconds=180,
+    )
+    msg = e.as_user_message()
+    assert "本次请求已使用 180 秒超时" in msg
+    assert "240-300" in msg

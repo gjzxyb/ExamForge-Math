@@ -52,6 +52,7 @@ def test_settings_save_llm_persists(client):
     data = json.loads(settings_path.read_text(encoding="utf-8"))
     assert data["llm"]["api_key"] == "sk-xyz"
     assert data["llm"]["model"] == "test-model"
+    assert data["llm"]["timeout"] == 180.0
 
 
 def test_settings_save_ocr_persists_without_calling_api(client):

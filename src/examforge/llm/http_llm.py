@@ -8,7 +8,6 @@ import json
 import os
 from typing import Any
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 from pydantic import TypeAdapter
 from .schemas import ExtractedSolution, ReportedSections, QAResult, GeneratedAnswer
 
@@ -16,8 +15,23 @@ from .schemas import ExtractedSolution, ReportedSections, QAResult, GeneratedAns
 DEFAULT_BASE = os.environ.get("EXAMFORGE_LLM_BASE", "https://api.deepseek.com/v1")
 DEFAULT_KEY = os.environ.get("EXAMFORGE_LLM_KEY", "")
 DEFAULT_MODEL = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
+MIN_HTTP_LLM_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_MIN_TIMEOUT", "180"))
+HTTP_LLM_CONNECT_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_CONNECT_TIMEOUT", "15"))
+HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30"))
 
 
+def effective_llm_timeout(timeout: float | int | str | None) -> float:
+    """真实 LLM 长 prompt 请求的最小超时。
+
+    DeepSeek/OpenAI 兼容接口在生成详细解析、报告或 RAG 回答时常超过
+    60 秒；这里统一把 http 后端请求级 read timeout 提升到至少 180 秒，
+    避免用户设置页仍保存旧的 60 秒导致正式生成反复超时。
+    """
+    try:
+        value = float(timeout) if timeout is not None else MIN_HTTP_LLM_TIMEOUT
+    except (TypeError, ValueError):
+        value = MIN_HTTP_LLM_TIMEOUT
+    return max(value, MIN_HTTP_LLM_TIMEOUT)
 
 
 def _normalize_llm_json_payload(data: Any) -> Any:
@@ -60,10 +74,12 @@ def _validate_llm_json(content: str, schema_model: type) -> Any:
 class LLMHttpError(RuntimeError):
     """HTTP LLM 调不通时抛此异常(替代裸 tenacity.RetryError,语义清晰)。"""
     def __init__(self, message: str, *, status_code: int | None = None,
-                 body: str | None = None, request_url: str | None = None) -> None:
+                 body: str | None = None, request_url: str | None = None,
+                 timeout_seconds: float | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.request_url = request_url
+        self.timeout_seconds = timeout_seconds
         self.body = (body or "")[:500]  # 截断避免泄露太多
 
     def as_user_message(self) -> str:
@@ -91,7 +107,9 @@ class LLMHttpError(RuntimeError):
         msg = " · ".join(parts) or raw_message
         lower = msg.lower()
         if "timed out" in lower or "timeout" in lower or "超时" in msg:
-            msg += " · 建议在设置中增大 LLM Timeout 到 120-180 秒；正式录入 prompt 比测试 ping 更长。"
+            if self.timeout_seconds:
+                msg += f" · 本次请求已使用 {int(self.timeout_seconds)} 秒超时。"
+            msg += " · 系统已把真实 LLM 请求级超时提升到至少 180 秒；若仍超时,请检查 DeepSeek 服务状态/网络代理,或在设置中继续增大到 240-300 秒。"
         return msg
 
 
@@ -102,15 +120,28 @@ class HttpLLM:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
-        self._timeout = timeout
-        self._client = httpx.Client(timeout=timeout)
+        try:
+            self._configured_timeout = float(timeout)
+        except (TypeError, ValueError):
+            self._configured_timeout = MIN_HTTP_LLM_TIMEOUT
+        self._timeout = effective_llm_timeout(timeout)
+        self._client = httpx.Client(timeout=httpx.Timeout(
+            connect=min(HTTP_LLM_CONNECT_TIMEOUT, self._timeout),
+            read=self._timeout,
+            write=min(HTTP_LLM_WRITE_TIMEOUT, self._timeout),
+            pool=min(HTTP_LLM_CONNECT_TIMEOUT, self._timeout),
+        ))
         self._max_retries = max_retries
 
     @property
     def timeout(self) -> float:
         return self._timeout
 
-    def _chat_json(self, *, system: str, user: str, schema_model: type) -> Any:
+    @property
+    def configured_timeout(self) -> float:
+        return self._configured_timeout
+
+    def _chat_json(self, *, system: str, user: str, schema_model: type, max_tokens: int | None = None) -> Any:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last_err: Exception | None = None
         for attempt in range(self._max_retries + 1):
@@ -125,6 +156,8 @@ class HttpLLM:
                             {"role": "user", "content": user},
                         ],
                         "response_format": {"type": "json_object"},
+                        "temperature": 0.2,
+                        **({"max_tokens": max_tokens} if max_tokens else {}),
                     },
                 )
                 # 4xx/5xx 不抛,手工 raise 以便带 status
@@ -155,6 +188,7 @@ class HttpLLM:
                     last_err = LLMHttpError(
                         message,
                         request_url=str(e.request.url),
+                        timeout_seconds=self._timeout,
                     )
                 if attempt < self._max_retries:
                     import time
@@ -170,13 +204,13 @@ class HttpLLM:
         from .prompts import EXTRACT_SYSTEM, apply_model_control, extract_user_prompt
         sys = apply_model_control(EXTRACT_SYSTEM)
         user = extract_user_prompt(stem_latex, reference_solution, taxonomy_hint, subject_area)
-        return self._chat_json(system=sys, user=user, schema_model=ExtractedSolution)
+        return self._chat_json(system=sys, user=user, schema_model=ExtractedSolution, max_tokens=2048)
 
     def generate_answer(self, *, stem_latex, subject_area, reference_solution=None, web_context=None):
         from .prompts import ANSWER_SYSTEM, apply_model_control, answer_user_prompt
         sys = apply_model_control(ANSWER_SYSTEM)
         user = answer_user_prompt(stem_latex, subject_area, reference_solution, web_context)
-        return self._chat_json(system=sys, user=user, schema_model=GeneratedAnswer)
+        return self._chat_json(system=sys, user=user, schema_model=GeneratedAnswer, max_tokens=4096)
 
     def render_report(self, *, method_name, applicability, core_idea,
                       procedure, pitfalls, examples):
@@ -184,10 +218,10 @@ class HttpLLM:
         sys = apply_model_control(REPORT_SYSTEM)
         user = report_user_prompt(method_name, applicability, core_idea,
                                   procedure, pitfalls, examples)
-        return self._chat_json(system=sys, user=user, schema_model=ReportedSections)
+        return self._chat_json(system=sys, user=user, schema_model=ReportedSections, max_tokens=4096)
 
     def answer_question(self, *, question, method_doc, examples):
         from .prompts import QA_SYSTEM, apply_model_control, qa_user_prompt
         sys = apply_model_control(QA_SYSTEM)
         user = qa_user_prompt(question, method_doc, examples)
-        return self._chat_json(system=sys, user=user, schema_model=QAResult)
+        return self._chat_json(system=sys, user=user, schema_model=QAResult, max_tokens=2048)

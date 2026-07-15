@@ -18,7 +18,7 @@ class LLMSettings:
     base_url: str = "https://api.deepseek.com/v1"
     api_key: str = ""
     model: str = "deepseek-chat"
-    timeout: float = 60.0
+    timeout: float = 180.0
 
 
 @dataclass
@@ -201,6 +201,12 @@ def _from_env(s: Settings) -> Settings:
     _set("EXAMFORGE_LLM_BASE", s.llm, "base_url")
     _set("EXAMFORGE_LLM_KEY", s.llm, "api_key")
     _set("EXAMFORGE_LLM_MODEL", s.llm, "model")
+    raw_llm_timeout = os.environ.get("EXAMFORGE_LLM_TIMEOUT")
+    if raw_llm_timeout:
+        try:
+            s.llm.timeout = float(raw_llm_timeout)
+        except ValueError:
+            pass
     _set_bool("EXAMFORGE_MODEL_CONTROL_ENABLED", s.model_control, "enabled")
     _set("EXAMFORGE_MODEL_AGENT_MD", s.model_control, "agent_md")
     _set_bool("EXAMFORGE_MODEL_SKILLS_ENABLED", s.model_control, "skills_enabled")

@@ -86,7 +86,7 @@ def test_pipeline_http_llm_timeout_falls_back_to_mock(ctx):
     )
     assert r.llm_backend_used == "mock_fallback"
     assert "timed out" in r.llm_error
-    assert "增大 LLM Timeout" in r.llm_error
+    assert "240-300" in r.llm_error
     assert len(r.confirmed) + len(r.suspicions) >= 1
 
 

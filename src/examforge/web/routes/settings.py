@@ -43,14 +43,17 @@ async def save_llm(
     base_url: str = Form(""),
     api_key: str = Form(""),
     model: str = Form(""),
-    timeout: float = Form(60.0),
+    timeout: float = Form(180.0),
 ):
+    from ...llm.http_llm import effective_llm_timeout
+
+    effective_timeout = effective_llm_timeout(timeout) if backend == "http" else timeout
     get_settings_store().update(llm={
         "backend": backend,
         "base_url": base_url,
         "api_key": api_key,
         "model": model,
-        "timeout": timeout,
+        "timeout": effective_timeout,
     })
     return JSONResponse({"ok": True, "redirect": "/settings?saved=llm"})
 
@@ -189,6 +192,8 @@ async def test_llm():
             "method_count": len(out.methods),
             "answer_ok": bool(generated.answer),
             "elapsed_ms": elapsed_ms,
+            "timeout": getattr(llm, "timeout", None),
+            "configured_timeout": getattr(llm, "configured_timeout", None),
         })
     except LLMHttpError as e:
         return JSONResponse({
