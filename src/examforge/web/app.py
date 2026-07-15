@@ -1,7 +1,9 @@
 """FastAPI 应用入口。"""
 
 import logging
+import re
 import traceback
+from html import escape
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, Request
@@ -20,6 +22,35 @@ log = logging.getLogger("examforge.web")
 
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+
+
+_MATH_SECTION_LABELS = (
+    "审题与条件整理", "关键转化与公式", "计算推导", "零点存在性与唯一性",
+    "结果验证与取舍", "易错点", "全网搜索参考",
+)
+
+
+def _format_math_text(value: object) -> str:
+    """把 LLM 生成的一整段解析整理成可读 HTML,并保留 MathJax 公式。
+
+    真实模型偶尔会把“审题与条件整理：关键转化……”输出成一整段。
+    这里在展示层做轻量分段,不改数据库原文。
+    """
+    text = "" if value is None else str(value)
+    text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not text:
+        return "—"
+    for label in _MATH_SECTION_LABELS:
+        text = re.sub(rf"(?<!^)(?<!\n)\s*({re.escape(label)}[:：])", r"\n\n\1", text)
+    text = re.sub(r"(?<!^)(?<!\n)\s*(第\(\d+\)问[①②③④⑤]?[:：])", r"\n\n\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    html = escape(text)
+    # 简单支持 Markdown 二级标题,其余保持换行,由 MathJax 渲染公式。
+    html = re.sub(r"^##\s*(.+)$", r"<h3>\1</h3>", html, flags=re.MULTILINE)
+    return html.replace("\n", "<br>\n")
+
+
+templates.env.filters["math_text"] = _format_math_text
 
 
 def _stats() -> dict:

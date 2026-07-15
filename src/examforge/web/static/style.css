@@ -10,6 +10,14 @@ textarea, input[type=text], input[type=number] { width: 100%; padding: 6px; font
 textarea { min-height: 8em; font-family: ui-monospace, "Cascadia Code", monospace; }
 button { padding: 6px 14px; cursor: pointer; }
 pre { background: #f9f9f9; padding: 0.8em; border-radius: 4px; overflow-x: auto; }
+.math-content { background: #fbfdff; border: 1px solid #dbe7f3; border-left: 4px solid #0b65c2; border-radius: 8px; padding: 0.9rem 1rem; line-height: 1.78; white-space: normal; overflow-x: auto; }
+.math-content h3 { margin: 0.8rem 0 0.35rem; color: #0b65c2; }
+.math-content h3:first-child { margin-top: 0; }
+.math-content mjx-container[display="true"] { margin: 0.65rem 0; overflow-x: auto; overflow-y: hidden; }
+.math-inline { line-height: 1.8; }
+.analysis-card { background: #fbfdff; }
+.compact-analysis { font-size: 0.95em; }
+.generated-analysis { margin-top: 0.55rem; background: #fff; }
 .flag-suspicious { background: #fff8c5; padding: 8px; margin: 8px 0; border-left: 4px solid #d2a000; }
 .flag-confirmed { background: #e9f7ef; padding: 8px; margin: 8px 0; border-left: 4px solid #198754; }
 .flag-rejected { background: #fde2e2; padding: 8px; margin: 8px 0; border-left: 4px solid #dc3545; }

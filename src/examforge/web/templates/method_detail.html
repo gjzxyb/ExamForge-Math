@@ -205,12 +205,12 @@
       {% if e.image_ref %}<p><img class="thumb" src="{{ e.image_ref }}" alt="题图"></p>{% endif %}
       <p class="stem-preview">{{ e.stem_latex[:180] }}{% if e.stem_latex|length > 180 %}…{% endif %}</p>
       <div class="example-answer-panel">
-        <p><b>答案：</b>{{ e.answer or "—" }}</p>
+        <p><b>答案：</b><span class="math-inline">{{ e.answer or "—" }}</span></p>
         <details>
           <summary>答案与官方解析</summary>
-          <p><b>答案：</b>{{ e.answer or "—" }}</p>
+          <p><b>答案：</b><span class="math-inline">{{ e.answer or "—" }}</span></p>
           <p><b>官方解析步骤：</b></p>
-          <pre>{{ e.official_analysis_steps or "—" }}</pre>
+          <div class="math-content compact-analysis">{{ (e.official_analysis_steps or "—")|math_text|safe }}</div>
           <form method="post" action="/problems/{{ e.id }}/generate-answer" style="margin-top:0.5rem">
             <button>生成答案</button>
             <span class="muted">调用 API 生成/更新该例题答案与详细解析。</span>

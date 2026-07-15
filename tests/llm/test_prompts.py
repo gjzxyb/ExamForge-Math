@@ -38,4 +38,6 @@ def test_answer_prompt_includes_detailed_requirement_and_web_context():
     assert "全网搜索参考" in p
     assert "某解析" in p
     assert "详细推导步骤" in p
+    assert "Markdown" in p
+    assert "标准 LaTeX" in p or "$$" in p
     assert "审题" in p and "验证" in p

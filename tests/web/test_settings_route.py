@@ -34,6 +34,7 @@ def test_settings_page_renders(client):
     assert "模型约束与 Skills" in r.text
     assert "AGENT.md" in r.text
     assert "全网搜索 API" in r.text
+    assert "MathJax" in r.text
 
 
 def test_settings_save_llm_persists(client):

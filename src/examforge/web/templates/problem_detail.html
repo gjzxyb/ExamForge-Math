@@ -27,9 +27,9 @@
     {% if llm_fallback %}<br><small>LLM 真实调用失败，已使用 mock 兜底结果。</small>{% endif %}
   </div>
   {% endif %}
-  <p><b>答案：</b>{{ problem.answer or "—" }}</p>
+  <p><b>答案：</b><span class="math-inline">{{ problem.answer or "—" }}</span></p>
   <h3>官方解析步骤</h3>
-  <pre>{{ problem.official_analysis_steps or problem.reference_solution or "—" }}</pre>
+  <div class="math-content analysis-card">{{ (problem.official_analysis_steps or problem.reference_solution or "—")|math_text|safe }}</div>
 </section>
 
 <section class="detail-card">
@@ -39,7 +39,7 @@
   <article class="solution-card">
     <h3>{% if item.method %}<a href="/methods/{{ item.method.id }}">{{ item.method.name }}</a>{% else %}未知方法{% endif %}</h3>
     <p><b>关键步骤：</b></p>
-    <pre>{{ item.si.key_steps }}</pre>
+    <div class="math-content compact-analysis">{{ item.si.key_steps|math_text|safe }}</div>
     <p><b>迁移提示：</b>{{ item.si.transfer_note or "—" }}</p>
     {% if item.si.reviewer_note %}<p class="muted">审核备注：{{ item.si.reviewer_note }}</p>{% endif %}
   </article>

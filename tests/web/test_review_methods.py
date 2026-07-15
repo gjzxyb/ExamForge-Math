@@ -371,6 +371,7 @@ def test_problem_detail_can_generate_answer_with_button(client):
     assert refreshed.status_code == 200
     assert "已生成/更新答案与解析草稿" in refreshed.text
     assert "1. 审题" in refreshed.text
+    assert "math-content analysis-card" in refreshed.text
 
 
 def test_method_detail_example_answer_panel_has_generate_button(client):

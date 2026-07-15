@@ -21,7 +21,7 @@
   {% endif %}
   {% if generated_answer_steps %}
     <details style="margin-top:0.45rem"><summary>查看生成依据</summary>
-      <div class="method-detail-text">{{ generated_answer_steps }}</div>
+      <div class="math-content generated-analysis">{{ generated_answer_steps|math_text|safe }}</div>
     </details>
   {% endif %}
 </div>
