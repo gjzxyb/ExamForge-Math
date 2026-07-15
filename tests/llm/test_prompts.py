@@ -28,3 +28,14 @@ def test_answer_prompt_requests_json_fields():
     assert "analysis_steps" in p
     assert "confidence" in p
     assert "导数" in p
+
+
+def test_answer_prompt_includes_detailed_requirement_and_web_context():
+    p = answer_user_prompt(
+        "stem", "导数", None,
+        "[1] 某解析\n摘要: 用分离参数求最值\nURL: https://example.com",
+    )
+    assert "全网搜索参考" in p
+    assert "某解析" in p
+    assert "详细推导步骤" in p
+    assert "审题" in p and "验证" in p

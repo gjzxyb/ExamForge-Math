@@ -70,6 +70,8 @@ def test_e2e_ingest_generates_answer_when_missing(app_client):
     })
     assert r.status_code == 200
     assert "自动生成答案" in r.text
+    assert "已调用全网搜索 API 辅助生成答案" in r.text
+    assert "1. 审题" in r.text
     fp = make_fingerprint(stem, 2026, "自动答案测试卷")
     p = problem_repo().find_by_fingerprint(fp)
     assert p is not None

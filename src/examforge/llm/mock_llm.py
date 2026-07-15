@@ -29,18 +29,39 @@ class MockLLM:
             overall_confidence=0.85,
         )
 
-    def generate_answer(self, *, stem_latex, subject_area, reference_solution=None) -> GeneratedAnswer:
+    def generate_answer(self, *, stem_latex, subject_area, reference_solution=None, web_context=None) -> GeneratedAnswer:
         """缺失答案时的本地占位生成,保证录入流程可 fail-open。"""
         stem = stem_latex or ""
+        search_note = ""
+        if web_context:
+            search_note = "\n5. 全网搜索参考:已接收搜索摘要,但 mock 后端不会据此做真实数学推导,仅标记流程已接入搜索上下文。"
         if _looks_like_parametric(stem):
             answer = "(自动生成占位答案) a=2"
-            steps = "识别为含参恒成立问题,先分离参数,再转化为函数最值求解。"
+            steps = (
+                "1. 审题:题干含“任意/恒成立”和参数 a,可先按含参恒成立模型处理。\n"
+                "2. 转化:把不等式整理为参数与关于 x 的函数最值之间的比较关系。\n"
+                "3. 计算:mock 后端不做真实符号运算,沿用内置样例推断最值对应参数为 2。\n"
+                "4. 验证:真实使用时仍需检查等号是否可取、参数定义域和端点条件;当前答案为占位草稿。"
+                f"{search_note}"
+            )
         elif "选择" in stem or "A" in stem and "B" in stem:
             answer = "(自动生成占位答案) 请以真实 LLM/API 结果为准"
-            steps = "mock 后端无法可靠判断选择题选项,这里只给出占位结果。"
+            steps = (
+                "1. 审题:识别到可能是选择题或含选项题。\n"
+                "2. 条件整理:需要完整选项、图形或题干约束才能排除干扰项。\n"
+                "3. 计算策略:应逐项代入或按题型建立方程/不等式验证。\n"
+                "4. 结论:mock 后端无法可靠判断选项,这里只给出占位结果并降低置信度。"
+                f"{search_note}"
+            )
         else:
             answer = "(自动生成占位答案) 待真实 LLM/API 补全"
-            steps = "mock 后端已触发缺失答案兜底,用于验证录入流程。"
+            steps = (
+                "1. 审题:已收到题干,但 mock 后端无法完成通用数学推导。\n"
+                "2. 条件整理:应先列出已知量、目标量和所属模块常用公式。\n"
+                "3. 计算路径:根据题型选择代数化简、函数最值、几何关系或概率模型。\n"
+                "4. 验证:最终答案需回代题干并检查定义域、单位、取值范围和特殊情形。"
+                f"{search_note}"
+            )
         return GeneratedAnswer(answer=answer, analysis_steps=steps, confidence=0.6)
 
     def render_report(self, *, method_name, applicability, core_idea,

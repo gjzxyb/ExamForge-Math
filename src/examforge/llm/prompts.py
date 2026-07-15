@@ -105,17 +105,25 @@ def qa_user_prompt(question: str, method_doc: str, examples: list[dict]) -> str:
 """
 
 ANSWER_SYSTEM = """你是高中数学答案生成助手。
-任务:在录入环节题目缺少答案时,根据题干与可选参考材料生成“答案/最终结果”。
+任务:在录入环节题目缺少答案时,根据题干、可选参考材料与可选全网搜索摘要,生成“答案/最终结果”和足够详细的推导依据。
 要求:
-- 优先给出最终答案,必要时包含 LaTeX。
-- analysis_steps 只写简要推导依据,不要冒充官方解析。
-- 不确定时也要给出最可能答案,并降低 confidence。
+- answer 字段优先给出最终答案/最终结果,必要时包含 LaTeX,保持简洁明确。
+- analysis_steps 必须详实,不少于 4 个步骤或等价信息量:审题与条件整理、关键转化/公式、计算推导、结果验证/取舍、易错点或不确定性说明。
+- 若提供“全网搜索参考”,只能作为核验和补充思路,不得直接照抄;应在 analysis_steps 末尾简要列出采用/未采用的搜索依据标题。
+- 若题目信息不足,也要给出最可能答案,同时在 analysis_steps 说明缺失信息和假设,并降低 confidence。
+- 不要冒充官方解析;这是系统自动生成的参考答案草稿。
 - 输出必须是严格 JSON,不含其它文本。
 """
 
 
-def answer_user_prompt(stem: str, subject_area: str, reference: str | None = None) -> str:
+def answer_user_prompt(
+    stem: str,
+    subject_area: str,
+    reference: str | None = None,
+    web_context: str | None = None,
+) -> str:
     ref = reference or "(无参考材料)"
+    web = web_context or "(未启用或未取得全网搜索参考)"
     return f"""所属模块:{subject_area}
 
 题干(LaTeX/文本):
@@ -124,8 +132,11 @@ def answer_user_prompt(stem: str, subject_area: str, reference: str | None = Non
 可选参考材料:
 {ref}
 
+全网搜索参考:
+{web}
+
 请输出 JSON,字段:
 - answer: 答案/最终结果,可含 LaTeX
-- analysis_steps: 简要推导步骤,用于提示该答案如何得出
+- analysis_steps: 详细推导步骤,需要覆盖审题、转化、计算、验证、易错点/假设;若使用全网搜索参考,列出参考来源标题
 - confidence: 0 到 1 的置信度
 """

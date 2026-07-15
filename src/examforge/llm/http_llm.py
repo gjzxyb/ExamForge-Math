@@ -172,10 +172,10 @@ class HttpLLM:
         user = extract_user_prompt(stem_latex, reference_solution, taxonomy_hint, subject_area)
         return self._chat_json(system=sys, user=user, schema_model=ExtractedSolution)
 
-    def generate_answer(self, *, stem_latex, subject_area, reference_solution=None):
+    def generate_answer(self, *, stem_latex, subject_area, reference_solution=None, web_context=None):
         from .prompts import ANSWER_SYSTEM, apply_model_control, answer_user_prompt
         sys = apply_model_control(ANSWER_SYSTEM)
-        user = answer_user_prompt(stem_latex, subject_area, reference_solution)
+        user = answer_user_prompt(stem_latex, subject_area, reference_solution, web_context)
         return self._chat_json(system=sys, user=user, schema_model=GeneratedAnswer)
 
     def render_report(self, *, method_name, applicability, core_idea,

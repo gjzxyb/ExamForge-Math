@@ -28,4 +28,16 @@ def test_mock_generate_answer_returns_generated_answer():
     assert out.answer
     assert "自动生成占位答案" in out.answer
     assert out.analysis_steps
+    assert "1. 审题" in out.analysis_steps
+    assert "4. 验证" in out.analysis_steps
     assert 0.0 <= out.confidence <= 1.0
+
+
+def test_mock_generate_answer_mentions_web_context_when_provided():
+    llm = MockLLM()
+    out = llm.generate_answer(
+        stem_latex="若对任意 x, x^2+a>=0 恒成立, 求 a",
+        subject_area="导数",
+        web_context="[1] 搜索摘要",
+    )
+    assert "全网搜索参考" in out.analysis_steps

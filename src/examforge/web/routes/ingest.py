@@ -26,6 +26,49 @@ def _friendly_llm_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {exc}"
 
 
+def _build_answer_search_query(*, stem_latex: str, subject_area: str) -> str:
+    stem = " ".join((stem_latex or "").split())
+    if len(stem) > 180:
+        stem = stem[:180]
+    return f"高中数学 {subject_area} 题目答案 详细解析 {stem}".strip()
+
+
+def _format_answer_web_context(hits) -> str:
+    lines: list[str] = []
+    for idx, hit in enumerate(hits, start=1):
+        title = (hit.title or "无标题").strip()
+        snippet = (hit.snippet or "").strip()
+        url = (hit.url or "").strip()
+        block = [f"[{idx}] {title}"]
+        if snippet:
+            block.append(f"摘要: {snippet}")
+        if url:
+            block.append(f"URL: {url}")
+        lines.append("\n".join(block))
+    return "\n\n".join(lines)
+
+
+def _get_answer_web_context(*, stem_latex: str, subject_area: str) -> tuple[str, str]:
+    """为缺失答案生成准备搜索上下文;失败不阻断录入。"""
+    try:
+        from ...config.settings import get_settings
+        from ...search import search_method_pages
+
+        settings = get_settings().web_search
+        if (settings.provider or "disabled").lower() == "disabled":
+            return "", ""
+        query = _build_answer_search_query(
+            stem_latex=stem_latex, subject_area=subject_area,
+        )
+        hits = search_method_pages(query, settings, max_results=3)
+        context = _format_answer_web_context(hits)
+        if not context:
+            return "", "全网搜索未返回可用摘要,已仅用题干生成答案。"
+        return context, f"已调用全网搜索 API 辅助生成答案(provider={settings.provider}, hits={len(hits)})"
+    except Exception as exc:
+        return "", f"全网搜索 API 调用失败,已仅用题干生成答案:{_friendly_llm_error(exc)}"
+
+
 def _generate_missing_answer_fail_open(
     llm,
     *,
@@ -33,16 +76,20 @@ def _generate_missing_answer_fail_open(
     subject_area: str,
     reference_solution: str | None,
 ):
-    """缺失答案时调用当前 LLM/API 生成答案；失败则降级 mock,不阻断录入。"""
+    """缺失答案时调用当前 LLM/API 生成详细答案；失败则降级 mock,不阻断录入。"""
     from ...llm.mock_llm import MockLLM
 
+    web_context, search_notice = _get_answer_web_context(
+        stem_latex=stem_latex, subject_area=subject_area,
+    )
     try:
         generated = llm.generate_answer(
             stem_latex=stem_latex,
             subject_area=subject_area,
             reference_solution=reference_solution,
+            web_context=web_context or None,
         )
-        return generated, ""
+        return generated, "", search_notice
     except Exception as exc:
         warning = _friendly_llm_error(exc)
         mock = MockLLM()
@@ -51,8 +98,9 @@ def _generate_missing_answer_fail_open(
             stem_latex=stem_latex,
             subject_area=subject_area,
             reference_solution=reference_solution,
+            web_context=web_context or None,
         )
-        return generated, warning
+        return generated, warning, search_notice
 
 
 async def _save_figure_upload(request: Request, figure: UploadFile | None) -> str | None:
@@ -139,13 +187,14 @@ async def submit(
     generated_answer_steps = None
     generated_answer_confidence = None
     answer_generation_warning = ""
+    answer_search_notice = ""
     try:
         image_ref = await _save_figure_upload(request, figure)
         # LLM 仍读取 reference_solution;优先使用官方解析步骤,兼容旧的 reference 字段。
         reference_solution = official_analysis_steps or reference or None
         answer = (answer or "").strip()
         if not answer:
-            generated, answer_generation_warning = _generate_missing_answer_fail_open(
+            generated, answer_generation_warning, answer_search_notice = _generate_missing_answer_fail_open(
                 llm,
                 stem_latex=stem,
                 subject_area=subject_area,
@@ -204,6 +253,8 @@ async def submit(
         msg += " · 已保存题图"
     if ocr_provider != "none":
         msg += f" · OCR来源={ocr_provider}"
+    if answer_search_notice:
+        msg += f" · {answer_search_notice}"
     extra_warning = ""
     if r.llm_error:
         extra_warning = (
