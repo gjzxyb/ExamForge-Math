@@ -341,3 +341,61 @@ def test_methods_page_can_discover_web_methods_and_add_candidate(client):
     assert method is not None
     assert method.status == MethodStatus.CANDIDATE
     assert "全网搜索来源" in method.core_idea
+
+
+def test_problem_detail_can_generate_answer_with_button(client):
+    p = problem_repo().upsert_by_fingerprint(Problem(
+        year=2026,
+        region="生成答案按钮卷",
+        subject_area=SubjectArea.DERIVATIVE,
+        stem_latex="若 a>0, 任意实数 x, f(x)=x^3-3x >= -a 恒成立, 求 a 的最大值。",
+        content_fingerprint=make_fingerprint("generate-answer-button", 2026, "生成答案按钮卷"),
+    ))
+
+    page = client.get(f"/problems/{p.id}")
+    assert page.status_code == 200
+    assert "答案与官方解析" in page.text
+    assert f'action="/problems/{p.id}/generate-answer"' in page.text
+    assert "生成答案" in page.text
+
+    r = client.post(f"/problems/{p.id}/generate-answer", follow_redirects=False)
+    assert r.status_code == 303
+
+    updated = problem_repo().get(p.id)
+    assert updated.answer
+    assert "自动生成占位答案" in updated.answer
+    assert updated.official_analysis_steps
+    assert "1. 审题" in updated.official_analysis_steps
+
+    refreshed = client.get(f"/problems/{p.id}?generated=1&search=1")
+    assert refreshed.status_code == 200
+    assert "已生成/更新答案与解析草稿" in refreshed.text
+    assert "1. 审题" in refreshed.text
+
+
+def test_method_detail_example_answer_panel_has_generate_button(client):
+    m = method_repo().add(Method(
+        name="例题答案生成法",
+        subject_area=SubjectArea.DERIVATIVE,
+        status=MethodStatus.CONFIRMED,
+    ))
+    p = problem_repo().upsert_by_fingerprint(Problem(
+        year=2026,
+        region="方法例题生成卷",
+        subject_area=SubjectArea.DERIVATIVE,
+        stem_latex="若对任意 x, x^2+a>=0 恒成立, 求 a",
+        content_fingerprint=make_fingerprint("method-example-generate", 2026, "方法例题生成卷"),
+    ))
+    solution_repo().add(SolutionInstance(
+        problem_id=p.id,
+        method_id=m.id,
+        key_steps="分离参数后求最值",
+        transfer_note="同类题先转最值",
+        review_status=ReviewStatus.CONFIRMED,
+    ))
+
+    detail = client.get(f"/methods/{m.id}")
+    assert detail.status_code == 200
+    assert "答案与官方解析" in detail.text
+    assert f'action="/problems/{p.id}/generate-answer"' in detail.text
+    assert "调用 API 生成/更新该例题答案与详细解析" in detail.text

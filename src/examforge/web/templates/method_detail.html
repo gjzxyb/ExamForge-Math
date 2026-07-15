@@ -204,7 +204,19 @@
       <p class="muted">{{ e.sub_knowledge or "未标注子知识点" }}{% if e.problem_type_tags %} · {{ e.problem_type_tags }}{% endif %}</p>
       {% if e.image_ref %}<p><img class="thumb" src="{{ e.image_ref }}" alt="题图"></p>{% endif %}
       <p class="stem-preview">{{ e.stem_latex[:180] }}{% if e.stem_latex|length > 180 %}…{% endif %}</p>
-      {% if e.answer %}<p><b>答案：</b>{{ e.answer }}</p>{% endif %}
+      <div class="example-answer-panel">
+        <p><b>答案：</b>{{ e.answer or "—" }}</p>
+        <details>
+          <summary>答案与官方解析</summary>
+          <p><b>答案：</b>{{ e.answer or "—" }}</p>
+          <p><b>官方解析步骤：</b></p>
+          <pre>{{ e.official_analysis_steps or "—" }}</pre>
+          <form method="post" action="/problems/{{ e.id }}/generate-answer" style="margin-top:0.5rem">
+            <button>生成答案</button>
+            <span class="muted">调用 API 生成/更新该例题答案与详细解析。</span>
+          </form>
+        </details>
+      </div>
       <p><b>本题关键演绎：</b>{{ e.key_steps[:160] }}{% if e.key_steps|length > 160 %}…{% endif %}</p>
       <p><b>迁移提示：</b>{{ e.transfer_note or e.summary }}</p>
       <p><a class="button-link" href="/problems/{{ e.id }}">打开例题详情 →</a></p>

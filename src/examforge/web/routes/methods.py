@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select, func
 from sqlmodel import Session
 
-from ..deps import get_session_dep
+from ..deps import get_session_dep, llm_dep
 from ..app import templates
 from ...config.settings import get_settings
 from ...search import WebSearchError, discover_method_candidates
@@ -878,6 +878,7 @@ async def detail_view(
             "region": p.region,
             "stem_latex": p.stem_latex,
             "answer": p.answer,
+            "official_analysis_steps": p.official_analysis_steps or p.reference_solution or "",
             "image_ref": p.image_ref,
             "sub_knowledge": p.sub_knowledge,
             "problem_type_tags": p.problem_type_tags,
@@ -919,6 +920,45 @@ async def detail_view(
     })
 
 
+@router.post("/problems/{problem_id}/generate-answer")
+async def generate_problem_answer(
+    problem_id: int,
+    request: Request,
+    s: Session = Depends(get_session_dep),
+    llm=Depends(llm_dep),
+):
+    """为已入库例题手动调用 LLM/API 生成或更新答案与解析草稿。"""
+    problem = s.get(Problem, problem_id)
+    if problem is None:
+        return HTMLResponse("Problem not found", status_code=404)
+
+    from .ingest import _generate_missing_answer_fail_open
+
+    reference = problem.official_analysis_steps or problem.reference_solution or None
+    generated, llm_warning, search_notice = _generate_missing_answer_fail_open(
+        llm,
+        stem_latex=problem.stem_latex,
+        subject_area=problem.subject_area.value,
+        reference_solution=reference,
+    )
+    problem.answer = (generated.answer or "").strip() or problem.answer
+    if generated.analysis_steps:
+        problem.official_analysis_steps = generated.analysis_steps.strip()
+        problem.reference_solution = generated.analysis_steps.strip()
+    s.add(problem)
+    s.commit()
+
+    flags = ["generated=1"]
+    if llm_warning:
+        flags.append("llm_fallback=1")
+    if search_notice:
+        flags.append("search=1")
+    return RedirectResponse(
+        f"/problems/{problem_id}?" + "&".join(flags),
+        status_code=303,
+    )
+
+
 @router.get("/problems/{problem_id}", response_class=HTMLResponse)
 async def problem_detail_view(
     request: Request,
@@ -944,4 +984,7 @@ async def problem_detail_view(
     return templates.TemplateResponse(request, "problem_detail.html", {
         "problem": problem,
         "solutions": solutions,
+        "generated_answer": request.query_params.get("generated") == "1",
+        "llm_fallback": request.query_params.get("llm_fallback") == "1",
+        "search_used": request.query_params.get("search") == "1",
     })

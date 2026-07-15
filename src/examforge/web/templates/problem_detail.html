@@ -16,6 +16,17 @@
 
 <section class="detail-card">
   <h2>答案与官方解析</h2>
+  <form method="post" action="/problems/{{ problem.id }}/generate-answer" style="margin:0.5rem 0 1rem">
+    <button>生成答案</button>
+    <span class="muted">调用当前 LLM/API，并可结合设置中的全网搜索 API 生成详细答案与解析草稿。</span>
+  </form>
+  {% if generated_answer %}
+  <div class="flag-confirmed">
+    ✓ 已生成/更新答案与解析草稿。
+    {% if search_used %}<br><small>已尝试调用全网搜索 API 辅助生成。</small>{% endif %}
+    {% if llm_fallback %}<br><small>LLM 真实调用失败，已使用 mock 兜底结果。</small>{% endif %}
+  </div>
+  {% endif %}
   <p><b>答案：</b>{{ problem.answer or "—" }}</p>
   <h3>官方解析步骤</h3>
   <pre>{{ problem.official_analysis_steps or problem.reference_solution or "—" }}</pre>
