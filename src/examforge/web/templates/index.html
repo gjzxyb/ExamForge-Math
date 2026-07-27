@@ -1,17 +1,39 @@
 {% extends "base.html" %}
 {% block title %}ExamForge-Math 首页{% endblock %}
 {% block body %}
-<h1>ExamForge-Math</h1>
-<p>从历年高考压轴题中自动提炼结构化解题方法库。</p>
-<ul>
-  <li>题库:<b>{{ stats.problems }}</b> 道</li>
-  <li>已确认方法:<b>{{ stats.methods_confirmed }}</b> 个(共 {{ stats.methods_total }} 个)</li>
-  <li>待审核条目:<b>{{ stats.pending_reviews }}</b> 条</li>
-  <li>例题数(confirmed):<b>{{ stats.confirmed_instances }}</b> 条</li>
-</ul>
-<p>
-  <a href="/ingest">录入新题 →</a>
-  <a href="/methods">浏览方法库 →</a>
-  <a href="/review">去审核 →</a>
-</p>
+<section class="hero">
+  <div>
+    <div class="eyebrow">ExamForge · 数学方法引擎</div>
+    <h1>把题目沉淀为<br>可迁移的解题记忆。</h1>
+    <p>从题目录入、智能审核到方法复盘，用结构化方法卡片建立“识别条件 → 调用方法 → 验证结论”的学习闭环。</p>
+    <div class="hero-actions">
+      <a class="button-link" href="/ingest">录入新题</a>
+      <a class="button-link ghost-link" href="/methods">浏览方法库</a>
+    </div>
+  </div>
+  <aside class="hero-panel" aria-label="学习记忆锚点">
+    <div class="memory-cue"><span>识别</span><strong>先看题目结构与触发条件</strong></div>
+    <div class="memory-cue"><span>调用</span><strong>再选定理、步骤与变式</strong></div>
+    <div class="memory-cue"><span>巩固</span><strong>通过例题和错因完成迁移</strong></div>
+  </aside>
+</section>
+
+<section class="metric-grid" aria-label="当前知识库统计">
+  <article class="metric-card"><span>已收录题目</span><b>{{ stats.problems }}</b><small>道结构化题目</small></article>
+  <article class="metric-card"><span>已确认方法</span><b>{{ stats.methods_confirmed }}</b><small>共 {{ stats.methods_total }} 个方法</small></article>
+  <article class="metric-card"><span>已验证例题</span><b>{{ stats.confirmed_instances }}</b><small>条可复用学习样本</small></article>
+  <article class="metric-card"><span>待审核条目</span><b>{{ stats.pending_reviews }}</b><small>条等待教研确认</small></article>
+</section>
+
+<section>
+  <div class="section-heading">
+    <div><h2>三步构建长期记忆</h2><p class="muted">每一步都保留可回看的依据，减少只会一题、不会一类的问题。</p></div>
+    <a href="/review">进入审核队列 →</a>
+  </div>
+  <div class="workflow-grid">
+    <article class="workflow-card"><span class="workflow-index">01</span><h3>结构化录入</h3><p>保留题图与 LaTeX，连同答案、解析、标签完整进入题目卡片。</p></article>
+    <article class="workflow-card"><span class="workflow-index">02</span><h3>提炼与审核</h3><p>将题目归并为方法、条件、定理和通用步骤，再由教研人员确认。</p></article>
+    <article class="workflow-card"><span class="workflow-index">03</span><h3>变式与复盘</h3><p>用例题、变式、错因图谱和学习问答验证方法是否真正掌握。</p></article>
+  </div>
+</section>
 {% endblock %}

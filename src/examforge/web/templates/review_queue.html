@@ -1,14 +1,21 @@
 {% extends "base.html" %}
 {% block title %}审核队列 · ExamForge{% endblock %}
 {% block body %}
-<h1>审核队列 ({{ items|length }})</h1>
+<div class="page-title-row">
+  <div>
+    <h1>审核队列 ({{ items|length }}) <span class="badge">待处理</span></h1>
+    <p class="muted">把自动归纳变成可靠的方法资产：确认、拒绝或重新归并每一条候选解法。</p>
+  </div>
+  <a class="button-link secondary-action" href="/methods">查看方法库</a>
+</div>
 {% if not items %}
-<p>🎉 暂无待审条目。全部题目都已自动确认或已拒绝。</p>
+<div class="flag-confirmed"><b>审核队列已清空。</b> 暂无待审条目，所有题目都已自动确认或已拒绝。</div>
 {% else %}
-<p>下表是"可疑"的解法实例(LLM 输出的方法名/板块不在 taxonomy、或置信度过低、或一题方法数过多)。
-你可以:确认(挂到当前 method)/ 拒绝(丢弃)/ 改归并到另一 method。</p>
+<div class="flag-suspicious"><b>审核提示</b>：以下为可疑解法实例（方法名/板块未命中 taxonomy、置信度偏低或单题方法过多）。
+你可以确认（挂到当前方法）、拒绝（丢弃）或改归并到另一方法。
+</div>
 {% for it in items %}
-<div class="flag-suspicious" data-si-id="{{ it.si.id }}">
+<article class="review-card" data-si-id="{{ it.si.id }}">
   <p>
     <b>SI #{{ it.si.id }}</b> ·
     题 #{{ it.problem.id }} · {{ it.problem.year }} {{ it.problem.region }} · 板块 {{ it.problem.subject_area.value }}
@@ -51,27 +58,27 @@
     <p>{{ it.si.transfer_note }}</p>
   </details>
 
-  <p>
-    <form method="post" action="/review/{{ it.si.id }}/confirm" style="display:inline">
+  <div class="review-actions">
+    <form method="post" action="/review/{{ it.si.id }}/confirm">
       <button>✓ 确认(挂到上面"系统建议"的方法)</button>
     </form>
-    <form method="post" action="/review/{{ it.si.id }}/reject" style="display:inline">
-      <input name="note" placeholder="拒绝原因" style="width:30em">
-      <button>✗ 拒绝</button>
+    <form method="post" action="/review/{{ it.si.id }}/reject">
+      <input name="note" placeholder="拒绝原因">
+      <button class="danger-action">✗ 拒绝</button>
     </form>
-  </p>
+  </div>
 
-  <p>
+  <div class="review-reassign">
     <b>改归并到:</b>
-    <select class="method-picker" data-si-id="{{ it.si.id }}" style="min-width:24em">
+    <select class="method-picker" data-si-id="{{ it.si.id }}">
       <option value="">-- 选择方法 --</option>
     </select>
-    <small class="method-picker-status" style="margin-left:0.5em;color:#888">(加载中…)</small>
-    <form method="post" action="/review/{{ it.si.id }}/revise" style="display:inline">
-      <input name="method_id" type="number" class="method-id-input" data-si-id="{{ it.si.id }}" required placeholder="method_id" style="width:8em">
+    <small class="method-picker-status muted">(加载中…)</small>
+    <form method="post" action="/review/{{ it.si.id }}/revise">
+      <input name="method_id" type="number" class="method-id-input" data-si-id="{{ it.si.id }}" required placeholder="method_id">
       <button>↻ 改归并</button>
     </form>
-  </p>
+  </div>
 
   <details>
     <summary><b>+ 批准为新方法(填描述入库)</b></summary>
@@ -119,7 +126,7 @@
       <button type="submit">✓ 批准为新方法并入 confirmed 库</button>
     </form>
   </details>
-</div>
+</article>
 {% endfor %}
 
 <script>

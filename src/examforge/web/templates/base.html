@@ -17,16 +17,25 @@ window.MathJax = {
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<nav>
-  <a href="/">首页</a>
-  <a href="/ingest">录入</a>
-  <a href="/methods">方法库</a>
-  <a href="/review">审核队列</a>
-  <a href="/report">报告</a>
-  <a href="/qa">问答</a>
-  <a href="/settings">设置</a>
-</nav>
-<hr>
-{% block body %}{% endblock %}
+<div class="page-glow page-glow-a"></div>
+<div class="page-glow page-glow-b"></div>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="ExamForge-Math 首页">
+    <span class="brand-mark">∑</span>
+    <span class="brand-text"><strong>ExamForge</strong><small>数学方法引擎</small></span>
+  </a>
+  <nav class="main-nav" aria-label="主导航">
+    <a class="nav-link {% if request.url.path == '/' %}is-active{% endif %}" href="/">首页</a>
+    <a class="nav-link {% if request.url.path.startswith('/ingest') %}is-active{% endif %}" href="/ingest">录入</a>
+    <a class="nav-link {% if request.url.path.startswith('/methods') %}is-active{% endif %}" href="/methods">方法库</a>
+    <a class="nav-link {% if request.url.path.startswith('/review') %}is-active{% endif %}" href="/review">审核队列</a>
+    <a class="nav-link {% if request.url.path.startswith('/report') %}is-active{% endif %}" href="/report">报告</a>
+    <a class="nav-link {% if request.url.path.startswith('/qa') %}is-active{% endif %}" href="/qa">问答</a>
+    <a class="nav-link {% if request.url.path.startswith('/settings') %}is-active{% endif %}" href="/settings">设置</a>
+  </nav>
+</header>
+<main class="app-shell">
+  {% block body %}{% endblock %}
+</main>
 </body>
 </html>

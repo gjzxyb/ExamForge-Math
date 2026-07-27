@@ -56,7 +56,7 @@
   </form>
 </dialog>
 
-<form method="get" action="/methods">
+<form method="get" action="/methods" class="filter-panel">
   <label>板块 <select name="area">
     <option value="">全部</option>
     {% for a in areas %}<option value="{{ a }}" {% if a==area %}selected{% endif %}>{{ a }}</option>{% endfor %}
@@ -69,13 +69,13 @@
   </select></label>
   <button>筛选</button>
 </form>
-<table>
+<table class="data-table">
   <tr><th>方法</th><th>板块</th><th>状态</th><th>例题数</th></tr>
   {% for m in methods %}
   <tr class="flag-{{ m.status }}">
     <td><a href="/methods/{{ m.id }}">{{ m.name }}</a></td>
     <td>{{ m.subject_area }}</td>
-    <td>{{ m.status }}</td>
+    <td><span class="badge">{{ m.status }}</span></td>
     <td>{{ m.count }}</td>
   </tr>
   {% else %}

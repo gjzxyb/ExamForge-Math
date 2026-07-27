@@ -1,9 +1,15 @@
 {% extends "base.html" %}
 {% block title %}报告 · ExamForge{% endblock %}
 {% block body %}
-<h1>解法专题报告</h1>
-<form method="get" action="/report">
-  <p><label>方法
+<div class="page-title-row">
+  <div>
+    <h1>解法专题报告</h1>
+    <p class="muted">把一个方法的适用条件、例题证据、定理与步骤整理为可复习的专题材料。</p>
+  </div>
+  <a class="button-link secondary-action" href="/methods">选择方法</a>
+</div>
+<form method="get" action="/report" class="report-picker">
+  <label>方法
     <select name="method_id" {% if not methods %}disabled{% endif %}>
       {% if not methods %}
       <option value="">暂无方法，请先录入题目或初始化方法库</option>
@@ -14,7 +20,7 @@
       {% endif %}
     </select>
   </label>
-  <button {% if not methods %}disabled{% endif %}>生成报告</button></p>
+  <button {% if not methods %}disabled{% endif %}>生成报告</button>
 </form>
 
 {% if not methods %}
@@ -22,9 +28,11 @@
 {% endif %}
 
 {% if report %}
-<h2>预览</h2>
-<pre>{{ report }}</pre>
-<p><a href="/report?method_id={{ selected }}&download=md">下载 Markdown</a>(此功能第一版未实现,可手动复制)</p>
+<section class="report-preview">
+  <h2>报告预览</h2>
+  <pre>{{ report }}</pre>
+  <p><a href="/report?method_id={{ selected }}&download=md">下载 Markdown</a>(此功能第一版未实现,可手动复制)</p>
+</section>
 {% elif selected is not none %}
 <p style="color:#c00">该方法不存在或被删除。</p>
 {% endif %}

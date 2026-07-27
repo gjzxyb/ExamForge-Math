@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}学生问答 · ExamForge{% endblock %}
 {% block body %}
-<h1>学生问答(RAG)</h1>
-<p style="color:#666">回答完全基于方法库(已沉淀的方法 + 例题)。可自动检索，也可先指定一个方法或该方法下的例题再提问。</p>
+<div class="page-title-row">
+  <div>
+    <h1>学生问答(RAG)</h1>
+    <p class="muted">基于已沉淀的方法和例题作答；先选择上下文可得到更聚焦、可验证的解释。</p>
+  </div>
+  <a class="button-link secondary-action" href="/methods">进入方法库</a>
+</div>
 <form method="post" action="/qa" class="qa-form">
   <section class="detail-card qa-context">
     <h2>选择提问上下文</h2>
@@ -42,7 +47,7 @@
 </form>
 
 {% if answer %}
-<hr>
+<section class="answer-card">
 <h2>回答</h2>
 <pre>{{ answer.answer }}</pre>
 {% if answer.cited_method_names %}
@@ -53,6 +58,7 @@
 <h3>引用例题 ID</h3>
 <ul>{% for i in answer.cited_problem_ids %}<li><a href="/problems/{{ i }}">#{{ i }}</a></li>{% endfor %}</ul>
 {% endif %}
+</section>
 {% endif %}
 
 <script>
