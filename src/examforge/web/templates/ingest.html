@@ -192,7 +192,7 @@ async function runOcrPreview() {
     }
     const text = body.latex_text || "";
     insertTextAtCursor(stem, text);
-    result.textContent = "✓ 已填入 LaTeX · provider=" + body.provider;
+    result.textContent = "✓ 已整理并填入可渲染 LaTeX · provider=" + body.provider;
     result.style.color = "#198754";
   } catch (err) {
     result.textContent = "✗ " + err;
@@ -296,7 +296,7 @@ function attachPasteImageOcr() {
         }
         const text = body.latex_text || "";
         insertTextAtCursor(field, text);
-        setOcrStatus("✓ 已把图片识别结果插入「" + label + "」 · provider=" + body.provider, "#198754");
+        setOcrStatus("✓ 已整理 OCR 断词、标点与公式，并插入「" + label + "」 · provider=" + body.provider, "#198754");
       } catch (err) {
         setOcrStatus("✗ 「" + label + "」图片识别失败：" + err, "#dc3545");
       }

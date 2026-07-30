@@ -22,6 +22,7 @@ def test_ingest_ocr_endpoint_mock(tmp_path: Path):
     body = r.json()
     assert body["ok"] is True
     assert body["provider"] == "mock"
+    assert "raw_text" in body
     assert "LaTeX" not in body["latex_text"]  # 返回的是可直接填入的题目文本
     assert "f(x)" in body["latex_text"]
     reset_db_engine_for_tests()

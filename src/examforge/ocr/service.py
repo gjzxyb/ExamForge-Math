@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from ..config.settings import OCRSettings, get_settings
+from .postprocess import format_math_ocr_text
 
 
 class OCRError(RuntimeError):
@@ -22,6 +23,7 @@ class OCRResult:
     provider: str
     latex_text: str
     raw: dict[str, Any] = field(default_factory=dict)
+    raw_text: str = ""
 
 
 def _normalize_provider(provider: str | None) -> str:
@@ -92,7 +94,12 @@ def _mock_result(filename: str) -> OCRResult:
         "% mock OCR result from " + filename + "\n"
         "设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, $f(x)\\ge -a$ 恒成立, 求 $a$ 的最大值。"
     )
-    return OCRResult(provider="mock", latex_text=sample, raw={"mock": True})
+    return OCRResult(
+        provider="mock",
+        latex_text=format_math_ocr_text(sample),
+        raw={"mock": True},
+        raw_text=sample,
+    )
 
 
 def _settings_for(provider: str) -> OCRSettings:
@@ -275,7 +282,12 @@ def recognize_math_image(
             settings=settings, endpoint=endpoint, timeout=timeout,
         )
 
-    text = _extract_text(data)
-    if not text:
+    raw_text = _extract_text(data)
+    if not raw_text:
         raise OCRError("OCR 返回成功但未找到 latex/text 字段,请检查代理返回结构。")
-    return OCRResult(provider=provider_name, latex_text=text, raw=data)
+    return OCRResult(
+        provider=provider_name,
+        latex_text=format_math_ocr_text(raw_text),
+        raw=data,
+        raw_text=raw_text,
+    )

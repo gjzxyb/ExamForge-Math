@@ -151,6 +151,7 @@ async def recognize_formula_image(
             "ok": True,
             "provider": result.provider,
             "latex_text": result.latex_text,
+            "raw_text": result.raw_text,
             "raw": result.raw,
         })
     except OCRError as e:

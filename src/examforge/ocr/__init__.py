@@ -11,5 +11,6 @@
 """
 
 from .service import OCRError, OCRResult, recognize_math_image
+from .postprocess import format_math_ocr_text
 
-__all__ = ["OCRError", "OCRResult", "recognize_math_image"]
+__all__ = ["OCRError", "OCRResult", "format_math_ocr_text", "recognize_math_image"]

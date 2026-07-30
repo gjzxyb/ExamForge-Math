@@ -1,6 +1,6 @@
 import pytest
 
-from examforge.ocr import OCRError, recognize_math_image
+from examforge.ocr import OCRError, format_math_ocr_text, recognize_math_image
 from examforge.config.settings import OCRSettings
 from examforge.ocr import service
 from examforge.ocr.service import (
@@ -59,6 +59,32 @@ def test_official_aliyun_endpoint_uses_signed_sdk_path(monkeypatch):
 
     result = recognize_math_image(b"image", provider="aliyun")
 
-    assert result.latex_text == "识别结果 $x^2$"
+    assert result.latex_text == "识别结果$x^2$"
+    assert result.raw_text == "识别结果 $x^2$"
     assert called["image"] == b"image"
     assert called["endpoint"] == settings.endpoint
+
+
+def test_format_math_ocr_text_improves_exam_readability():
+    raw = (
+        "甲、乙两人进行乒乓球练习，每个球胜者得1分，负者得0分."
+        "设每个球甲 胜的概率为 P \\left( \\frac { 1 } { 2 } < p < 1 \\right) ， ，"
+        "乙胜的概率为 q，p+q=1， ，且各球的胜负相 互独立."
+        "对正整数 k≥2， 记 p _ { k } 为打完k个球后甲比乙至少多得2分的概 率，"
+        " qk 为打完k个球后乙比甲至少多得2分的概率. "
+        "(1)求 p _ { 3 } ， p _ { 4 } (用p表示)；"
+        "(2)若 \\frac { p _ { 4 } - p _ { 3 } } { q _ { 4 } - q _ { 3 } } = 4 ， ，求 "
+        "(3)证明：对任意正整数 m，p2m+1-q2m+1<p2m-q2m<p2m+2-q2m+2"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert "甲胜的概率为$p$（$\\frac{1}{2}<p<1$）" in formatted
+    assert "各球的胜负相互独立" in formatted
+    assert "$p_k$" in formatted and "$q_k$" in formatted
+    assert "\n(1) 求" in formatted
+    assert "\n(2) 若" in formatted
+    assert "\n(3) 证明" in formatted
+    assert "$p_{2m+1}-q_{2m+1}<p_{2m}-q_{2m}<p_{2m+2}-q_{2m+2}$" in formatted
+    assert "， ，" not in formatted
+    assert "概 率" not in formatted
