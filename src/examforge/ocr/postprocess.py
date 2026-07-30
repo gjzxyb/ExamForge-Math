@@ -7,8 +7,8 @@ import re
 
 _CJK = r"\u3400-\u4dbf\u4e00-\u9fff"
 _MATH_RUN = re.compile(
-    r"(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=()])"
-    r"(?:[ \t]*(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=()]))*"
+    r"(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),])"
+    r"(?:[ \t]*(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),]))*"
 )
 _DELIMITED_MATH = re.compile(r"(\$\$.*?\$\$|\$.*?\$)", re.DOTALL)
 
@@ -42,6 +42,8 @@ def _compact_latex(text: str) -> str:
     text = re.sub(r"_\{([A-Za-z0-9])\}", r"_\1", text)
     text = re.sub(r"\^\{([A-Za-z0-9])\}", r"^\1", text)
     text = re.sub(r"\\(left|right)\s*([()\[\]|])", r"\\\1\2", text)
+    text = re.sub(r"\\left\([ \t]*", r"\\left(", text)
+    text = re.sub(r"[ \t]*\\right\)", r"\\right)", text)
     return text
 
 
@@ -82,12 +84,26 @@ def _wrap_math_runs(text: str) -> str:
             stripped = value.strip()
             if not _looks_like_math(stripped):
                 return value
-            stripped = re.sub(r"[ \t]*([_<>=+\-])[ \t]*", r"\1", stripped)
+            stripped = re.sub(r"[ \t]*([,_<>=+\-])[ \t]*", r"\1", stripped)
             stripped = re.sub(r"}[ \t]+{", "}{", stripped)
             stripped = re.sub(r"\{[ \t]+", "{", stripped)
             stripped = re.sub(r"[ \t]+\}", "}", stripped)
             stripped = re.sub(r"[ \t]+", " ", stripped)
-            stripped = re.sub(r"\\(ge|le|ne)[ \t]*", r"\\\1 ", stripped)
+            stripped = re.sub(
+                r"(?<=[0-9A-Za-z}])[ \t]+(?=[A-Za-z](?:[_^]|\b))",
+                "",
+                stripped,
+            )
+            stripped = re.sub(
+                r"(?<=[A-Za-z0-9}])[ \t]+(?=\\(?:left|right)\b)",
+                "",
+                stripped,
+            )
+            stripped = re.sub(
+                r"\\(ge|le|ne)(?![A-Za-z])[ \t]*",
+                r"\\\1 ",
+                stripped,
+            )
             prefix = value[: len(value) - len(value.lstrip())]
             suffix = value[len(value.rstrip()):]
             return f"{prefix}${stripped}${suffix}"
@@ -106,6 +122,17 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n").strip()
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=[{_CJK}])", "", text)
     text = re.sub(r"(?<=概率为)[ \t]+P(?=[ \t]*(?:\\left|\(|（|，|,))", "p", text)
+    text = re.sub(
+        r"\([ \t]*0[ \t]*[，,][ \t]*\+[ \t]*∞[ \t]*\)",
+        r"\\left(0,+\\infty\\right)",
+        text,
+    )
+    text = re.sub(
+        r"\\left\((.*?)\\right\)",
+        lambda m: "\\left(" + m.group(1).replace("，", ",") + "\\right)",
+        text,
+    )
+    text = text.replace("∞", r"\infty")
     text = text.replace("≥", r"\ge ").replace("≤", r"\le ").replace("≠", r"\ne ")
     text = _compact_latex(text)
     text = _repair_sequence_subscripts(text)
@@ -122,12 +149,25 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = re.sub(r"(?:，[ \t]*){2,}", "，", text)
     text = re.sub(r"(?:。[ \t]*){2,}", "。", text)
     text = re.sub(
-        rf"(?<=[{_CJK}])\.(?=[ \t]*(?:[{_CJK}]|\([1-9]\d*\)|$))",
+        rf"(?<=[{_CJK}])\.(?=[ \t\n]*(?:[{_CJK}]|\([1-9]\d*\)|[①-⑳]|$))",
+        "。",
+        text,
+    )
+    text = re.sub(
+        rf"(?<=[A-Za-z0-9}})\]])\.(?=[ \t\n]*(?:[{_CJK}]|\([1-9]\d*\)|[①-⑳]|$))",
+        "。",
+        text,
+    )
+    text = re.sub(
+        rf"(?<=[A-Za-z0-9}})\]])[ \t]+\.(?=[ \t\n]*(?:[{_CJK}]|\([1-9]\d*\)|[①-⑳]|$))",
         "。",
         text,
     )
     text = re.sub(r"[ \t]*(?=\([1-9]\d*\))", "\n", text)
     text = re.sub(r"\(([1-9]\d*)\)[ \t]*", r"(\1) ", text)
+    text = re.sub(r"(?<!\n)[ \t]*(?=[①-⑳])", "\n", text)
+    text = re.sub(r"([①-⑳])[ \t]*", r"\1 ", text)
+    text = re.sub(r"[.。；][ \t]*\n+(?=①)", "：\n", text)
     text = re.sub(r"\n{2,}", "\n", text)
     text = _wrap_math_runs(text)
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=\$)", "", text)

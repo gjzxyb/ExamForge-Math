@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from examforge.ocr import OCRError, format_math_ocr_text, recognize_math_image
@@ -5,6 +7,7 @@ from examforge.config.settings import OCRSettings
 from examforge.ocr import service
 from examforge.ocr.service import (
     _aliyun_endpoint_host,
+    _extract_aliyun_layout_text,
     _extract_text,
     _is_aliyun_official_endpoint,
 )
@@ -33,6 +36,24 @@ def test_aliyun_official_endpoint_detection():
 def test_extract_text_decodes_aliyun_data_json_string():
     data = {"Data": '{"content": "函数 $f(x)=x^2$"}'}
     assert _extract_text(data) == "函数 $f(x)=x^2$"
+
+
+def test_extract_aliyun_layout_text_restores_blocks_and_merges_visual_wrap():
+    words = [
+        {"word": "已知函数", "pos": [{"x": 0, "y": 10}]},
+        {"word": "f(x).", "pos": [{"x": 60, "y": 11}]},
+        {"word": "(1)证明：", "pos": [{"x": 0, "y": 35}]},
+        {"word": "结论；", "pos": [{"x": 70, "y": 35}]},
+        {"word": "①设函数", "pos": [{"x": 24, "y": 60}]},
+        {"word": "单", "pos": [{"x": 430, "y": 60}]},
+        {"word": "调递减；", "pos": [{"x": 0, "y": 80}]},
+        {"word": "②比较大小.", "pos": [{"x": 24, "y": 105}]},
+    ]
+    data = {"Data": json.dumps({"content": "flat", "prism_wordsInfo": words})}
+
+    assert _extract_aliyun_layout_text(data) == (
+        "已知函数f(x).\n(1)证明：结论；\n①设函数单调递减；\n②比较大小."
+    )
 
 
 def test_official_aliyun_endpoint_uses_signed_sdk_path(monkeypatch):
@@ -88,3 +109,29 @@ def test_format_math_ocr_text_improves_exam_readability():
     assert "$p_{2m+1}-q_{2m+1}<p_{2m}-q_{2m}<p_{2m+2}-q_{2m+2}$" in formatted
     assert "， ，" not in formatted
     assert "概 率" not in formatted
+
+
+def test_format_math_ocr_text_preserves_left_command_and_normalizes_intervals():
+    raw = (
+        "已知函数 f \\left( x \\right) = \\ln \\left( 1 + x \\right) - k x ^ { 3 }，"
+        "其中 0 < k < \\frac { 1 } { 3 } . "
+        "(1)证明：f(x)在区间 (0，+∞) 上成立；"
+        "① 证明：g(t)在区间 \\left( 0 ， x _ { 1 } \\right) 单 调递减；"
+        "②比较 2 x _ { 1 } 与 x _ { 2 } 的大小。"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert "$f\\left(x\\right)=\\ln\\left(1+x\\right)-kx^3$" in formatted
+    assert "$0<k<\\frac{1}{3}$。" in formatted
+    assert "$\\left(0,+\\infty\\right)$" in formatted
+    assert "$\\left(0,x_1\\right)$" in formatted
+    assert "\\le ft" not in formatted
+    assert "\n① 证明" in formatted
+    assert "\n② 比较" in formatted
+
+
+def test_format_math_ocr_text_uses_colon_before_numbered_subquestions():
+    formatted = format_math_ocr_text("(2)设$x_1$为零点. ①证明结论； ②比较大小.")
+
+    assert "零点：\n① 证明结论；\n② 比较大小。" in formatted

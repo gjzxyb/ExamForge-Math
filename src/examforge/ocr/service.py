@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 from typing import Any
@@ -87,6 +88,67 @@ def _extract_text(obj: Any) -> str:
             return val.strip()
 
     return ""
+
+
+def _extract_aliyun_layout_text(obj: Any) -> str:
+    """依据阿里云词块坐标恢复行序，再合并仅由版宽造成的折行。"""
+    if isinstance(obj, str):
+        try:
+            obj = json.loads(obj)
+        except json.JSONDecodeError:
+            return ""
+    if not isinstance(obj, dict):
+        return ""
+    if "Data" in obj:
+        nested = _extract_aliyun_layout_text(obj["Data"])
+        if nested:
+            return nested
+
+    words = obj.get("prism_wordsInfo")
+    if not isinstance(words, list) or not words:
+        return ""
+
+    positioned: list[tuple[int, int, str]] = []
+    for item in words:
+        if not isinstance(item, dict):
+            continue
+        word = str(item.get("word", "")).strip()
+        pos = item.get("pos")
+        if not word or not isinstance(pos, list) or not pos:
+            continue
+        points = [p for p in pos if isinstance(p, dict)]
+        if not points:
+            continue
+        x = min(int(p.get("x", 0)) for p in points)
+        y = min(int(p.get("y", 0)) for p in points)
+        positioned.append((y, x, word))
+    if not positioned:
+        return ""
+
+    rows: list[dict[str, Any]] = []
+    for y, x, word in sorted(positioned):
+        row = next((r for r in reversed(rows) if abs(y - r["y"]) <= 7), None)
+        if row is None:
+            rows.append({"y": y, "items": [(x, word)]})
+        else:
+            row["items"].append((x, word))
+
+    physical_lines = [
+        "".join(word for _, word in sorted(row["items"])).strip()
+        for row in rows
+    ]
+    logical_lines: list[str] = []
+    block_start = re.compile(r"^(?:\([1-9]\d*\)|[①-⑳]|[A-D][.、])")
+    for line in physical_lines:
+        if not line:
+            continue
+        if not logical_lines or block_start.match(line):
+            logical_lines.append(line)
+        elif re.search(r"[。；.!?！？]$", logical_lines[-1]):
+            logical_lines.append(line)
+        else:
+            logical_lines[-1] += line
+    return "\n".join(logical_lines)
 
 
 def _mock_result(filename: str) -> OCRResult:
@@ -285,9 +347,10 @@ def recognize_math_image(
     raw_text = _extract_text(data)
     if not raw_text:
         raise OCRError("OCR 返回成功但未找到 latex/text 字段,请检查代理返回结构。")
+    layout_text = _extract_aliyun_layout_text(data) or raw_text
     return OCRResult(
         provider=provider_name,
-        latex_text=format_math_ocr_text(raw_text),
+        latex_text=format_math_ocr_text(layout_text),
         raw=data,
         raw_text=raw_text,
     )
