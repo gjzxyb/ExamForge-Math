@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 from typing import Any
 
 import httpx
@@ -41,7 +43,13 @@ def _extract_text(obj: Any) -> str:
     if obj is None:
         return ""
     if isinstance(obj, str):
-        return obj.strip()
+        value = obj.strip()
+        if value.startswith(("{", "[")):
+            try:
+                return _extract_text(json.loads(value))
+            except json.JSONDecodeError:
+                pass
+        return value
     if isinstance(obj, list):
         parts = [_extract_text(x) for x in obj]
         return "\n".join([x for x in parts if x]).strip()
@@ -128,6 +136,110 @@ def _auth_headers(settings: OCRSettings) -> dict[str, str]:
     return headers
 
 
+def _is_aliyun_official_endpoint(endpoint: str) -> bool:
+    """判断是否为阿里云 OCR 官方接入点，而不是用户自建代理。"""
+    parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
+    host = (parsed.hostname or "").lower()
+    return host == "ocr-api.aliyuncs.com" or (
+        host.startswith("ocr-api.") and host.endswith(".aliyuncs.com")
+    )
+
+
+def _aliyun_endpoint_host(endpoint: str) -> str:
+    parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
+    return parsed.netloc or parsed.path
+
+
+def _aliyun_error_message(exc: Exception) -> str:
+    code = str(getattr(exc, "code", "") or "")
+    message = str(getattr(exc, "message", "") or exc)
+    if code == "InvalidVersion" or "InvalidVersion" in message:
+        return (
+            "阿里云 OCR API 版本无效。ExamForge 已固定使用官方版本 "
+            "2021-07-07；请确认 Endpoint 为 "
+            "https://ocr-api.cn-hangzhou.aliyuncs.com，且不要把 Action 填入 Region。"
+        )
+    detail = f"{code}: {message}" if code else message
+    return f"阿里云 OCR 调用失败: {detail}"
+
+
+def _recognize_aliyun_official(
+    image_bytes: bytes,
+    *,
+    settings: OCRSettings,
+    endpoint: str,
+    timeout: float,
+) -> dict[str, Any]:
+    """用阿里云官方 2021-07-07 SDK 完成 V3/RPC 签名和试卷识别。"""
+    if not settings.access_key_id or not settings.access_key_secret:
+        raise OCRError("阿里云 OCR 直连需要填写 Access Key ID 和 Access Key Secret。")
+
+    try:
+        from alibabacloud_ocr_api20210707.client import Client as AliyunOCRClient
+        from alibabacloud_ocr_api20210707.models import RecognizeEduPaperOcrRequest
+        from alibabacloud_tea_openapi import models as open_api_models
+        from alibabacloud_tea_util import models as util_models
+
+        config = open_api_models.Config(
+            access_key_id=settings.access_key_id,
+            access_key_secret=settings.access_key_secret,
+            endpoint=_aliyun_endpoint_host(endpoint),
+        )
+        client = AliyunOCRClient(config)
+        request = RecognizeEduPaperOcrRequest(
+            image_type="photo",
+            subject="default",
+            output_oricoord=False,
+            body=image_bytes,
+        )
+        runtime = util_models.RuntimeOptions(
+            connect_timeout=int(timeout * 1000),
+            read_timeout=int(timeout * 1000),
+        )
+        response = client.recognize_edu_paper_ocr_with_options(request, runtime)
+        body = response.body.to_map() if hasattr(response.body, "to_map") else response.body
+        if not isinstance(body, dict):
+            raise OCRError("阿里云 OCR 返回了无法解析的响应。")
+        return body
+    except OCRError:
+        raise
+    except Exception as exc:
+        raise OCRError(_aliyun_error_message(exc)) from exc
+
+
+def _recognize_proxy(
+    image_bytes: bytes,
+    *,
+    filename: str,
+    provider_name: str,
+    settings: OCRSettings,
+    endpoint: str,
+    timeout: float,
+) -> dict[str, Any]:
+    payload = {
+        "provider": provider_name,
+        "filename": filename,
+        "image_base64": base64.b64encode(image_bytes).decode("ascii"),
+        "return_format": "latex",
+        "scene": "math_problem",
+    }
+    headers = {"Content-Type": "application/json", **_auth_headers(settings)}
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(endpoint, json=payload, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+    except httpx.HTTPStatusError as exc:
+        body = exc.response.text[:300]
+        if provider_name == "aliyun" and "InvalidVersion" in body:
+            raise OCRError(_aliyun_error_message(exc)) from exc
+        raise OCRError(f"OCR HTTP {exc.response.status_code}: {body}") from exc
+    except OCRError:
+        raise
+    except Exception as exc:
+        raise OCRError(f"OCR 调用失败: {type(exc).__name__}: {exc}") from exc
+
+
 def recognize_math_image(
     image_bytes: bytes,
     *,
@@ -153,23 +265,15 @@ def recognize_math_image(
         raise OCRError(f"未知 OCR provider: {settings.provider!r}")
 
     endpoint = _endpoint_for(settings)
-    payload = {
-        "provider": provider_name,
-        "filename": filename,
-        "image_base64": base64.b64encode(image_bytes).decode("ascii"),
-        "return_format": "latex",
-        "scene": "math_problem",
-    }
-    headers = {"Content-Type": "application/json", **_auth_headers(settings)}
-    try:
-        with httpx.Client(timeout=timeout) as client:
-            resp = client.post(endpoint, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as e:
-        raise OCRError(f"OCR HTTP {e.response.status_code}: {e.response.text[:300]}") from e
-    except Exception as e:
-        raise OCRError(f"OCR 调用失败: {type(e).__name__}: {e}") from e
+    if provider_name == "aliyun" and _is_aliyun_official_endpoint(endpoint):
+        data = _recognize_aliyun_official(
+            image_bytes, settings=settings, endpoint=endpoint, timeout=timeout
+        )
+    else:
+        data = _recognize_proxy(
+            image_bytes, filename=filename, provider_name=provider_name,
+            settings=settings, endpoint=endpoint, timeout=timeout,
+        )
 
     text = _extract_text(data)
     if not text:

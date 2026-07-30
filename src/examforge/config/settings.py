@@ -58,8 +58,8 @@ class WebSearchSettings:
 class OCRSettings:
     """公式识别配置。
 
-    provider 支持 none/mock/tencent/aliyun。tencent/aliyun 建议配置为自建代理
-    endpoint,由代理负责云厂商签名,本应用负责上传图片和解析返回 LaTeX。
+    provider 支持 none/mock/tencent/aliyun。阿里云官方 ocr-api Endpoint 由应用
+    使用 2021-07-07 SDK 直连并完成签名；其它 Endpoint 继续按自建代理协议调用。
     """
     provider: str = "none"         # none | mock | tencent | aliyun
     access_key_id: str = ""

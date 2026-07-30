@@ -126,7 +126,7 @@ async def save_ocr(
     region: str = Form(""),
     endpoint: str = Form(""),
 ):
-    """OCR 配置项仅占位,保存但不会触发任何调用。"""
+    """保存 OCR 配置；阿里云官方 Endpoint 将自动使用 2021-07-07 API。"""
     get_settings_store().update(ocr={
         "provider": provider,
         "access_key_id": access_key_id,

@@ -57,7 +57,7 @@ def test_settings_save_llm_persists(client):
 
 
 def test_settings_save_ocr_persists_without_calling_api(client):
-    """OCR 配置项不接实现,但能保存。"""
+    """保存 OCR 配置时不发起识别调用。"""
     r = client.post("/settings/ocr", data={
         "provider": "tencent",
         "access_key_id": "ak",

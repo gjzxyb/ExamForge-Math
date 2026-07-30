@@ -109,7 +109,7 @@
 
 <!-- ============ OCR ============ -->
 <h2>公式识别(OCR)</h2>
-<p class="muted">用于 /ingest 页面“先识别公式/题目”按钮。腾讯云/阿里云建议填写已完成厂商签名的代理 Endpoint;本地演示可选 mock。</p>
+<p class="muted">用于 /ingest 页面“先识别公式/题目”按钮。阿里云官方 Endpoint 可直接填写，系统固定使用 2021-07-07 API 并自动完成 AK/SK 签名；其它地址按自建代理协议调用。</p>
 <form id="form-ocr" method="post" action="/settings/ocr">
   <p>
     <label>Provider
@@ -123,8 +123,8 @@
   </p>
   <p><label>Access Key ID <input name="access_key_id" value="{{ s.ocr.access_key_id }}"></label></p>
   <p><label>Access Key Secret <input name="access_key_secret" type="password" value="{{ s.ocr.access_key_secret }}"></label></p>
-  <p><label>Region <input name="region" value="{{ s.ocr.region }}"></label></p>
-  <p><label>Endpoint/代理 URL <input name="endpoint" value="{{ s.ocr.endpoint }}" placeholder="如 https://your-cloud-function/ocr"></label></p>
+  <p><label>Region <input name="region" value="{{ s.ocr.region }}" placeholder="阿里云可填 cn-hangzhou"></label><small>此处填写地域，不要填写 RecognizeEduPaperOcr 等 Action 名称。</small></p>
+  <p><label>Endpoint/代理 URL <input name="endpoint" value="{{ s.ocr.endpoint }}" placeholder="https://ocr-api.cn-hangzhou.aliyuncs.com"></label><small>阿里云官方地址将调用 RecognizeEduPaperOcr；也可填写兼容现有 JSON 协议的代理 URL。</small></p>
   <button>保存 OCR</button>
 </form>
 
