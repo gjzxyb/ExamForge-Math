@@ -135,3 +135,37 @@ def test_format_math_ocr_text_uses_colon_before_numbered_subquestions():
     formatted = format_math_ocr_text("(2)设$x_1$为零点. ①证明结论； ②比较大小.")
 
     assert "零点：\n① 证明结论；\n② 比较大小。" in formatted
+
+
+def test_format_math_ocr_text_removes_common_duplicate_ocr_tokens():
+    raw = "(1)证明：f(x) )在区间内；①设g(t). .证明结论；② ②比较大小。"
+
+    formatted = format_math_ocr_text(raw)
+
+    assert "$f(x)$在区间内" in formatted
+    assert "$g(t)$。证明结论" in formatted
+    assert formatted.count("②") == 1
+    assert "))" not in formatted
+    assert ". ." not in formatted
+
+
+def test_format_math_ocr_text_repairs_geometry_commands_and_symbols():
+    raw = (
+        "如图，在四边形ABCD中，AB\\parallelCD，\\angleDAB=90°，"
+        "EFⅡAD，A'B∥CD'F，GH⊥AD，A'BⅡ平面CD'F。"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert "$ABCD$" in formatted
+    assert "$AB\\parallel CD$" in formatted
+    assert "$\\angle DAB=90^\\circ$" in formatted
+    assert "$EF\\parallel AD$" in formatted
+    assert "$A'B\\parallel CD'F$" in formatted
+    assert "$GH\\perp AD$" in formatted
+    assert "$A'B\\parallel$平面$CD'F$" in formatted
+    assert "\\parallelCD" not in formatted
+    assert "\\angleDAB" not in formatted
+    assert "Ⅱ" not in formatted
+    assert "∥" not in formatted
+    assert "⊥" not in formatted

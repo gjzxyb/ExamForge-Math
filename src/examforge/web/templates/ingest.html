@@ -78,10 +78,19 @@
         <option value="aliyun_printed_formula_ocr">阿里云印刷体公式识别</option>
       </select>
     </label></p>
-    <p><label>题目文本(LaTeX)<br>
-      <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴图片会自动 OCR 并插入 LaTeX。</small>
-      <textarea name="stem" required data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="题目文本" placeholder="例:设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, $f(x)\ge -a$ 恒成立, 求 $a$ 的最大值。可直接粘贴文字或图片。"></textarea>
-    </label></p>
+    <div class="stem-editor-grid">
+      <label class="stem-source-pane">题目文本(LaTeX)
+        <small class="paste-field-hint">支持 Ctrl+V 粘贴文字；粘贴图片会自动 OCR 并插入 LaTeX。</small>
+        <textarea name="stem" required data-paste-ocr="true" data-paste-text-image="true" data-ocr-label="题目文本" placeholder="例:设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, $f(x)\ge -a$ 恒成立, 求 $a$ 的最大值。可直接粘贴文字或图片。"></textarea>
+      </label>
+      <section class="latex-preview-panel" aria-labelledby="stem-preview-title">
+        <div class="latex-preview-heading">
+          <strong id="stem-preview-title">题面渲染预览</strong>
+          <span>MathJax</span>
+        </div>
+        <div id="stem-math-preview" class="math-content ocr-math-preview" aria-live="polite">暂无题目内容</div>
+      </section>
+    </div>
     <p><label>题图/几何图截图<br>
       <input id="figure-input" name="figure" type="file" accept="image/*">
     </label></p>
@@ -146,6 +155,29 @@ function insertTextAtCursor(field, text) {
   field.focus();
   field.setSelectionRange(cursor, cursor);
   field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+let stemPreviewTimer = null;
+
+function renderStemMathPreview() {
+  const source = document.querySelector('textarea[name="stem"]');
+  const preview = document.getElementById("stem-math-preview");
+  if (!source || !preview) return;
+  const value = (source.value || "").trim();
+  if (window.MathJax && typeof window.MathJax.typesetClear === "function") {
+    window.MathJax.typesetClear([preview]);
+  }
+  preview.textContent = value || "暂无题目内容";
+  if (value && window.MathJax && typeof window.MathJax.typesetPromise === "function") {
+    window.MathJax.typesetPromise([preview]).catch(err => {
+      console.error("MathJax preview failed", err);
+    });
+  }
+}
+
+function scheduleStemMathPreview() {
+  if (stemPreviewTimer) window.clearTimeout(stemPreviewTimer);
+  stemPreviewTimer = window.setTimeout(renderStemMathPreview, 120);
 }
 
 async function recognizeImageFile(file, provider) {
@@ -307,6 +339,10 @@ function attachPasteImageOcr() {
 document.addEventListener("DOMContentLoaded", () => {
   attachPasteImageOcr();
   attachFigurePasteUpload();
+  const stem = document.querySelector('textarea[name="stem"]');
+  if (stem) stem.addEventListener("input", scheduleStemMathPreview);
+  renderStemMathPreview();
 });
+window.addEventListener("load", renderStemMathPreview);
 </script>
 {% endblock %}

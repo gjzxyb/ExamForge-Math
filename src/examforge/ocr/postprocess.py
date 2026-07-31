@@ -7,15 +7,46 @@ import re
 
 _CJK = r"\u3400-\u4dbf\u4e00-\u9fff"
 _MATH_RUN = re.compile(
-    r"(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),])"
-    r"(?:[ \t]*(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),]))*"
+    r"(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),'])"
+    r"(?:[ \t]*(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),']))*"
 )
+_GEOMETRY_COMMANDS = r"parallel|perp|angle|triangle|arc|cong|sim"
 _DELIMITED_MATH = re.compile(r"(\$\$.*?\$\$|\$.*?\$)", re.DOTALL)
 
 
 def _compact_braced_arg(match: re.Match[str]) -> str:
     command, value = match.group(1), match.group(2)
     return f"\\{command}{{{''.join(value.split())}}}"
+
+
+def _separate_geometry_commands(text: str) -> str:
+    """修复 OCR 把几何 LaTeX 命令与点名粘连后形成的非法命令。"""
+    return re.sub(
+        rf"\\({_GEOMETRY_COMMANDS})(?=[A-Za-z])",
+        r"\\\1 ",
+        text,
+    )
+
+
+def _repair_geometry_latex(text: str) -> str:
+    """把常见几何符号误识别统一为 MathJax 可解析的 LaTeX。"""
+    text = re.sub(
+        r"([A-Z](?:')?)[ \t]*(?:Ⅱ|∥|‖)[ \t]*(?=[A-Z]|平面)",
+        r"\1\\parallel ",
+        text,
+    )
+    text = re.sub(
+        r"([A-Z](?:')?)[ \t]*⊥[ \t]*(?=[A-Z])",
+        r"\1\\perp ",
+        text,
+    )
+    text = text.replace("∠", r"\angle ").replace("△", r"\triangle ")
+    text = re.sub(
+        r"(\d+(?:\.\d+)?)[ \t]*(?:°|º)",
+        lambda match: f"{match.group(1)}^\\circ",
+        text,
+    )
+    return _separate_geometry_commands(text)
 
 
 def _compact_latex(text: str) -> str:
@@ -73,6 +104,7 @@ def _looks_like_math(value: str) -> bool:
         "\\" in compact
         or re.search(r"[_^<>=+\-]", compact)
         or re.fullmatch(r"[A-Za-z]", compact)
+        or re.fullmatch(r"[A-Z](?:[A-Z0-9]|')+", compact)
         or re.search(r"[A-Za-z][A-Za-z0-9_{}^]*\(", compact)
     )
 
@@ -99,6 +131,7 @@ def _wrap_math_runs(text: str) -> str:
                 "",
                 stripped,
             )
+            stripped = _separate_geometry_commands(stripped)
             stripped = re.sub(
                 r"\\(ge|le|ne)(?![A-Za-z])[ \t]*",
                 r"\\\1 ",
@@ -134,8 +167,12 @@ def format_math_ocr_text(raw_text: str) -> str:
     )
     text = text.replace("∞", r"\infty")
     text = text.replace("≥", r"\ge ").replace("≤", r"\le ").replace("≠", r"\ne ")
+    text = _repair_geometry_latex(text)
     text = _compact_latex(text)
     text = _repair_sequence_subscripts(text)
+    text = re.sub(r"([A-Za-z]\\?\([^()\n]*\))[ \t]*\)", r"\1", text)
+    text = re.sub(r"\.[ \t]*\.(?=[ \t]*[\u3400-\u9fff])", ".", text)
+    text = re.sub(r"([①-⑳])(?:[ \t\n]*\1)+", r"\1", text)
 
     # “概率为 p(范围)”是 OCR 常见连写，改成中文括注可避免被误读为乘法。
     text = re.sub(

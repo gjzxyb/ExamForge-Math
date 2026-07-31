@@ -67,6 +67,11 @@ def test_ingest_page_textareas_support_paste_image_ocr(tmp_path: Path):
     assert "setFigureInputFile" in html
     assert "handleFigurePaste" in html
     assert "new DataTransfer" in html
+    assert 'id="stem-math-preview"' in html
+    assert "题面渲染预览" in html
+    assert "renderStemMathPreview" in html
+    assert "scheduleStemMathPreview" in html
+    assert "typesetPromise" in html
     reset_db_engine_for_tests()
     reset_vector_for_tests()
     mod._store = None

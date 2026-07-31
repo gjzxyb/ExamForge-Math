@@ -297,6 +297,15 @@ tbody tr:last-child td { border-bottom: 0; }
 .figure-preview[hidden] { display: none; }
 .paste-field-hint { display: block; margin: .2rem 0 .35rem; color: #255bb1; font-size: .9em; }
 [data-paste-text-image="true"] { border-left: 3px solid #86b7fe; }
+.stem-editor-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: stretch; margin-bottom: 1rem; }
+.stem-source-pane { display: flex; min-width: 0; flex-direction: column; font-weight: 700; }
+.stem-source-pane textarea { min-height: 280px; height: 100%; margin-top: .25rem; font-family: "Cascadia Code", Consolas, monospace; font-size: .92rem; line-height: 1.65; }
+.latex-preview-panel { min-width: 0; overflow: hidden; border: 1px solid #cfe0f9; border-radius: 10px; background: #fff; }
+.latex-preview-heading { display: flex; align-items: center; justify-content: space-between; min-height: 2.65rem; padding: .55rem .8rem; border-bottom: 1px solid #dce8f7; background: #f5f9ff; }
+.latex-preview-heading strong { color: #174f91; font-size: .94rem; }
+.latex-preview-heading span { color: #4170a7; font-size: .75rem; font-weight: 700; }
+.ocr-math-preview { min-height: 237px; margin: 0; border: 0; border-left: 0; border-radius: 0; background: #fff; color: #17253a; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; line-height: 2; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ocr-math-preview mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 
 .theorem-list, .generated-variant-list, .discovery-list { display: grid; gap: .75rem; }
 .theorem-card, .style-card, .generated-variant-card, .discovery-card { padding: .9rem 1rem; }
@@ -353,6 +362,9 @@ tbody tr:last-child td { border-bottom: 0; }
   .page-title-row { flex-direction: column; }
   .title-actions { width: 100%; }
   .title-actions > * { flex: 1; }
+  .stem-editor-grid { grid-template-columns: 1fr; }
+  .stem-source-pane textarea { min-height: 220px; }
+  .ocr-math-preview { min-height: 180px; }
 }
 @media (max-width: 560px) {
   .app-shell { width: min(100% - 1.1rem, 1180px); padding-top: 1.25rem; }
