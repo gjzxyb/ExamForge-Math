@@ -191,9 +191,11 @@ async def submit(
     answer_search_notice = ""
     try:
         image_ref = await _save_figure_upload(request, figure)
-        # LLM 仍读取 reference_solution;优先使用官方解析步骤,兼容旧的 reference 字段。
-        reference_solution = official_analysis_steps or reference or None
+        # LLM 仍读取 reference_solution;优先使用人工填写的官方解析，兼容旧 reference 字段。
         answer = (answer or "").strip()
+        official_analysis_steps = (official_analysis_steps or "").strip()
+        reference = (reference or "").strip()
+        reference_solution = official_analysis_steps or reference or None
         if not answer:
             generated, answer_generation_warning, answer_search_notice = _generate_missing_answer_fail_open(
                 llm,
@@ -206,13 +208,18 @@ async def submit(
             generated_answer_confidence = generated.confidence
             if generated_answer:
                 answer = generated_answer
-                if not reference_solution:
-                    reference_solution = generated_answer
+            if generated_answer_steps and not reference_solution:
+                # 自动生成的详细推导必须随题目持久化，供审核队列和例题详情复用。
+                official_analysis_steps = generated_answer_steps
+                reference_solution = generated_answer_steps
+            elif not reference_solution and generated_answer:
+                # 兼容少数只返回最终答案、不返回 analysis_steps 的模型。
+                reference_solution = generated_answer
         p = ingest_problem(
             stem_latex=stem, year=year, region=region,
             subject_area=subject_area, reference_solution=reference_solution,
             answer=answer or None,
-            official_analysis_steps=official_analysis_steps or reference or None,
+            official_analysis_steps=official_analysis_steps or reference or generated_answer_steps or None,
             sub_knowledge=sub_knowledge,
             problem_type_tags=problem_type_tags,
             image_ref=image_ref,

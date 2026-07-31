@@ -344,6 +344,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .review-reassign select { min-width: min(100%, 25rem); }
 .review-card details { padding: .45rem 0; }
 .review-card summary { color: #30506f; cursor: pointer; font-weight: 700; }
+.review-answer-panel { margin: .55rem 0; padding: .8rem !important; border: 1px solid #cfe0f9; border-radius: 12px; background: rgba(247,251,255,.92); }
+.review-answer-panel .math-content { margin: .35rem 0 .75rem; }
 .review-card .danger-action { border-color: #efb8c1; color: #b93c4d; background: #fff; }
 .review-card .danger-action:hover { color: #9f2838; background: #fff5f6; }
 .qa-context { border-top: 3px solid var(--violet); }

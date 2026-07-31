@@ -28,7 +28,7 @@
   </div>
   {% endif %}
   <p><b>答案：</b><span class="math-inline">{{ problem.answer or "—" }}</span></p>
-  <h3>官方解析步骤</h3>
+  <h3>详细解析步骤</h3>
   <div class="math-content analysis-card">{{ (problem.official_analysis_steps or problem.reference_solution or "—")|math_text|safe }}</div>
 </section>
 

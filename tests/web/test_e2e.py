@@ -78,6 +78,23 @@ def test_e2e_ingest_generates_answer_when_missing(app_client):
     assert p is not None
     assert p.answer
     assert "自动生成占位答案" in p.answer
+    assert p.official_analysis_steps
+    assert "1. 审题" in p.official_analysis_steps
+    assert p.reference_solution == p.official_analysis_steps
+
+    review = app_client.get("/review")
+    assert review.status_code == 200
+    assert "答案与详细解析" in review.text
+    assert "自动生成占位答案" in review.text
+    assert "1. 审题" in review.text
+    assert f'/problems/{p.id}' in review.text
+
+    detail = app_client.get(f"/problems/{p.id}")
+    assert detail.status_code == 200
+    assert "答案与官方解析" in detail.text
+    assert "详细解析步骤" in detail.text
+    assert "自动生成占位答案" in detail.text
+    assert "1. 审题" in detail.text
 
 
 def test_e2e_methods_list_renders(app_client):

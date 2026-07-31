@@ -49,6 +49,14 @@
     <summary>题干片段</summary>
     <p>{{ it.problem.stem_latex[:200] }}{% if it.problem.stem_latex|length > 200 %}…{% endif %}</p>
   </details>
+  <details open class="review-answer-panel">
+    <summary>答案与详细解析</summary>
+    <p><b>最终答案：</b></p>
+    <div class="math-content compact-analysis">{{ (it.problem.answer or "—")|math_text|safe }}</div>
+    <p><b>详细解析步骤：</b></p>
+    <div class="math-content compact-analysis">{{ (it.problem.official_analysis_steps or it.problem.reference_solution or "—")|math_text|safe }}</div>
+    <p><a href="/problems/{{ it.problem.id }}">打开例题详情 →</a></p>
+  </details>
   <details>
     <summary>关键步骤</summary>
     <p>{{ it.si.key_steps }}</p>
