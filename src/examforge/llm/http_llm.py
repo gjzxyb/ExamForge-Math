@@ -19,6 +19,7 @@ MIN_HTTP_LLM_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_MIN_TIMEOUT", "180"))
 HTTP_LLM_CONNECT_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_CONNECT_TIMEOUT", "15"))
 HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30"))
 MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "8192"))
+ANSWER_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_ANSWER_TOKENS", "8192"))
 
 
 def effective_llm_timeout(timeout: float | int | str | None) -> float:
@@ -153,7 +154,15 @@ class HttpLLM:
     def configured_timeout(self) -> float:
         return self._configured_timeout
 
-    def _chat_json(self, *, system: str, user: str, schema_model: type, max_tokens: int | None = None) -> Any:
+    def _chat_json(
+        self,
+        *,
+        system: str,
+        user: str,
+        schema_model: type,
+        max_tokens: int | None = None,
+        retry_user_suffix: str = "",
+    ) -> Any:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         last_err: Exception | None = None
         for attempt in range(self._max_retries + 1):
@@ -171,7 +180,10 @@ class HttpLLM:
                         "model": self.model,
                         "messages": [
                             {"role": "system", "content": system},
-                            {"role": "user", "content": user},
+                            {
+                                "role": "user",
+                                "content": user + (retry_user_suffix if attempt else ""),
+                            },
                         ],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.2,
@@ -243,7 +255,17 @@ class HttpLLM:
         from .prompts import ANSWER_SYSTEM, apply_model_control, answer_user_prompt
         sys = apply_model_control(ANSWER_SYSTEM)
         user = answer_user_prompt(stem_latex, subject_area, reference_solution, web_context)
-        return self._chat_json(system=sys, user=user, schema_model=GeneratedAnswer, max_tokens=4096)
+        return self._chat_json(
+            system=sys,
+            user=user,
+            schema_model=GeneratedAnswer,
+            max_tokens=ANSWER_JSON_OUTPUT_TOKENS,
+            retry_user_suffix=(
+                "\n\n上一次回答因过长被截断。请重新独立生成完整 JSON；"
+                "将 analysis_steps 压缩到 3500 个中文字符以内，保留关键推导、"
+                "结论与验证，禁止重复题干，务必闭合所有字符串、公式与 JSON。"
+            ),
+        )
 
     def render_report(self, *, method_name, applicability, core_idea,
                       procedure, pitfalls, examples):

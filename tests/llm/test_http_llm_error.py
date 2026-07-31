@@ -157,6 +157,51 @@ def test_http_llm_retries_truncated_generated_answer_with_more_tokens(monkeypatc
     assert [request["max_tokens"] for request in requests] == [4096, 8192]
 
 
+def test_generate_answer_starts_with_full_output_budget_and_shortens_retry(monkeypatch):
+    from examforge.llm.http_llm import HttpLLM
+
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    requests = []
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        text = "ok"
+        request = FakeRequest()
+
+        def __init__(self, complete):
+            self.complete = complete
+
+        def json(self):
+            if not self.complete:
+                return {"choices": [{
+                    "finish_reason": "length",
+                    "message": {"content": '{"answer":"2","analysis_steps":"过长'},
+                }]}
+            return {"choices": [{
+                "finish_reason": "stop",
+                "message": {"content": '{"answer":"2","analysis_steps":"精简完整步骤","confidence":0.8}'},
+            }]}
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            requests.append(kwargs["json"])
+            return FakeResponse(complete=len(requests) > 1)
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", max_retries=2)
+    llm._client = FakeClient()
+    result = llm.generate_answer(stem_latex="1+1", subject_area="数与式")
+
+    assert result.analysis_steps == "精简完整步骤"
+    assert requests[0]["max_tokens"] == 8192
+    assert requests[1]["max_tokens"] == 8192
+    assert "上一次回答因过长被截断" not in requests[0]["messages"][1]["content"]
+    assert "上一次回答因过长被截断" in requests[1]["messages"][1]["content"]
+    assert "3500" in requests[1]["messages"][1]["content"]
+
+
 def test_http_llm_reports_truncated_json_as_friendly_error(monkeypatch):
     from examforge.llm.http_llm import HttpLLM
     from examforge.llm.schemas import GeneratedAnswer
