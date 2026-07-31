@@ -2,35 +2,18 @@
 {% block title %}初始化管理员 · ExamForge{% endblock %}
 {% block body %}
 <section class="auth-shell">
-  <div class="auth-orbit auth-orbit-one"></div>
-  <div class="auth-orbit auth-orbit-two"></div>
-  <div class="auth-layout auth-layout-setup">
-    <aside class="auth-visual" aria-label="安全初始化说明">
-      <div class="auth-visual-grid"></div>
-      <div class="auth-visual-content">
-        <div class="auth-brand-lockup"><span class="auth-symbol">∑</span><span><b>ExamForge</b><small>SECURE INITIALIZATION</small></span></div>
-        <div class="auth-shield">✓</div>
-        <p class="auth-kicker">仅需一次的安全初始化</p>
-        <h2>为你的知识库建立<br><em>第一道访问防线</em></h2>
-        <p>创建本地管理员账号后，所有题目、方法、审核与模型设置都将受到登录保护。</p>
-        <div class="auth-feature-list"><span><b>01</b> PBKDF2-SHA256 加盐哈希</span><span><b>02</b> 12 小时签名会话</span><span><b>03</b> 全站访问控制</span></div>
-      </div>
-    </aside>
-    <div class="auth-card">
-      <div class="auth-mobile-mark">∑</div>
-      <div class="auth-status"><span></span>首次安全设置</div>
-      <p class="auth-eyebrow">FIRST-TIME SETUP</p>
-      <h1>创建管理员账号</h1>
-      <p class="auth-lead">此账号将拥有系统完整权限，请使用高强度密码。</p>
-      {% if error %}<div class="flag-rejected auth-alert">{{ error }}</div>{% endif %}
-      <form method="post" action="/setup" class="auth-form">
-        <label><span>管理员用户名</span><div class="auth-input-wrap"><i class="auth-input-icon">◎</i><input name="username" value="{{ username }}" minlength="3" autocomplete="username" required autofocus></div></label>
-        <label><span>管理员密码</span><div class="auth-input-wrap"><i class="auth-input-icon">◇</i><input name="password" type="password" minlength="10" autocomplete="new-password" required></div><small>至少 10 个字符，建议包含大小写字母、数字和符号。</small></label>
-        <label><span>确认密码</span><div class="auth-input-wrap"><i class="auth-input-icon">◇</i><input name="confirm_password" type="password" minlength="10" autocomplete="new-password" required></div></label>
-        <button type="submit" class="auth-submit">创建并进入系统 <span>→</span></button>
-      </form>
-      <div class="auth-security-note"><span>✓</span><p><b>密码不会明文保存</b><small>系统仅持久化不可逆的加盐哈希。</small></p></div>
-    </div>
+  <div class="auth-card auth-card-setup">
+    <div class="auth-mini-brand">∑ ExamForge</div>
+    <h1>创建管理员</h1>
+    <p class="auth-subtitle">首次使用，请设置系统登录账号</p>
+    {% if error %}<div class="flag-rejected auth-alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/setup" class="auth-form">
+      <label><span>管理员用户名</span><input name="username" value="{{ username }}" minlength="3" autocomplete="username" required autofocus></label>
+      <label><span>管理员密码</span><input name="password" type="password" minlength="10" autocomplete="new-password" required></label>
+      <label><span>确认密码</span><input name="confirm_password" type="password" minlength="10" autocomplete="new-password" required></label>
+      <button type="submit" class="auth-submit">创建并进入系统</button>
+    </form>
+    <p class="auth-footnote">密码使用 PBKDF2-SHA256 加盐哈希保存</p>
   </div>
 </section>
 {% endblock %}

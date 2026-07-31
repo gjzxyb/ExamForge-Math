@@ -25,10 +25,10 @@ def test_all_features_require_login_but_health_is_public(tmp_path, monkeypatch):
         assert client.get("/login").status_code == 200
         assert client.get("/setup").status_code == 200
         login_html = client.get("/login").text
-        assert "auth-layout" in login_html
-        assert "从一道题，沉淀一套方法" in login_html
-        assert "安全连接已建立" in login_html
-        assert "data-password-toggle" in login_html
+        assert "auth-page" in login_html
+        assert "进入数学方法智能工作区" in login_html
+        assert "安全访问 · 本地加密认证" in login_html
+        assert 'class="auth-card"' in login_html
     finally:
         reset_db_engine_for_tests()
         reset_vector_for_tests()

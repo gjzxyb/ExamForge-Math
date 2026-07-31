@@ -2,60 +2,23 @@
 {% block title %}登录 · ExamForge{% endblock %}
 {% block body %}
 <section class="auth-shell">
-  <div class="auth-orbit auth-orbit-one"></div>
-  <div class="auth-orbit auth-orbit-two"></div>
-  <div class="auth-layout">
-    <aside class="auth-visual" aria-label="ExamForge 功能概览">
-      <div class="auth-visual-grid"></div>
-      <div class="auth-visual-content">
-        <div class="auth-brand-lockup">
-          <span class="auth-symbol">∑</span>
-          <span><b>ExamForge</b><small>MATH INTELLIGENCE ENGINE</small></span>
-        </div>
-        <div class="auth-formula" aria-hidden="true">
-          <span>f′(x)</span><i></i><span>LaTeX</span><i></i><span>RAG</span>
-        </div>
-        <p class="auth-kicker">从一道题，沉淀一套方法</p>
-        <h2>让每次解题都成为<br><em>可复用的知识资产</em></h2>
-        <p>智能录入、方法提炼、审核验证与专题报告，集中在一个安全工作区。</p>
-        <div class="auth-feature-list">
-          <span><b>01</b> 数学 OCR 与 LaTeX</span>
-          <span><b>02</b> 通用解法知识库</span>
-          <span><b>03</b> 学生问答与验证</span>
-        </div>
-      </div>
-    </aside>
-    <div class="auth-card">
-      <div class="auth-mobile-mark">∑</div>
-      <div class="auth-status"><span></span>安全连接已建立</div>
-      <p class="auth-eyebrow">WELCOME BACK</p>
-      <h1>欢迎回来</h1>
-      <p class="auth-lead">登录你的 ExamForge 工作区，继续构建数学方法体系。</p>
-      {% if error %}<div class="flag-rejected auth-alert">{{ error }}</div>{% endif %}
-      {% if needs_setup %}
-        <div class="flag-suspicious auth-alert">首次运行需要先创建管理员账号。</div>
-        <a class="button-link auth-submit" href="/setup">创建管理员账号 <span>→</span></a>
-      {% else %}
-      <form method="post" action="/login" class="auth-form">
-        <input type="hidden" name="next" value="{{ next_url }}">
-        <label><span>用户名</span><div class="auth-input-wrap"><i class="auth-input-icon" aria-hidden="true">◎</i><input name="username" value="{{ username }}" autocomplete="username" required autofocus></div></label>
-        <label><span>密码</span><div class="auth-input-wrap"><i class="auth-input-icon" aria-hidden="true">◇</i><input id="login-password" name="password" type="password" autocomplete="current-password" required><button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="显示密码">显示</button></div></label>
-        <button type="submit" class="auth-submit">安全登录 <span>→</span></button>
-      </form>
-      {% endif %}
-      <div class="auth-security-note"><span>✓</span><p><b>隐私保护</b><small>凭据仅用于本地身份验证，会话采用签名 Cookie 保护。</small></p></div>
-    </div>
+  <div class="auth-card">
+    <div class="auth-mini-brand">∑ ExamForge</div>
+    <h1>登录</h1>
+    <p class="auth-subtitle">进入数学方法智能工作区</p>
+    {% if error %}<div class="flag-rejected auth-alert">{{ error }}</div>{% endif %}
+    {% if needs_setup %}
+      <div class="flag-suspicious auth-alert">首次运行需要先创建管理员账号。</div>
+      <a class="button-link auth-submit" href="/setup">创建管理员账号</a>
+    {% else %}
+    <form method="post" action="/login" class="auth-form">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <label><span>用户名</span><input name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
+      <label><span>密码</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="auth-submit">登录</button>
+    </form>
+    {% endif %}
+    <p class="auth-footnote">安全访问 · 本地加密认证</p>
   </div>
 </section>
-<script>
-document.querySelectorAll('[data-password-toggle]').forEach(button => {
-  button.addEventListener('click', () => {
-    const input = document.getElementById(button.dataset.passwordToggle);
-    const show = input.type === 'password';
-    input.type = show ? 'text' : 'password';
-    button.textContent = show ? '隐藏' : '显示';
-    button.setAttribute('aria-label', show ? '隐藏密码' : '显示密码');
-  });
-});
-</script>
 {% endblock %}

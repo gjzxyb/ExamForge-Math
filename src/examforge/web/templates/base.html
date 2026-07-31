@@ -16,10 +16,10 @@ window.MathJax = {
 <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="{% if request.url.path in ['/login', '/setup'] %}auth-page{% endif %}">
 <div class="page-glow page-glow-a"></div>
 <div class="page-glow page-glow-b"></div>
-<header class="topbar">
+<header class="topbar {% if request.url.path in ['/login', '/setup'] %}auth-topbar{% endif %}">
   <a class="brand" href="/" aria-label="ExamForge-Math 首页">
     <span class="brand-mark">∑</span>
     <span class="brand-text"><strong>ExamForge</strong><small>数学方法引擎</small></span>
