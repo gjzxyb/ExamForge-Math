@@ -286,6 +286,16 @@ tbody tr:last-child td { border-bottom: 0; }
 .ingest-progress.failed { border-color: #efb8c1; background: #fff7f8; }
 #ingest-result-links { display: flex; gap: .7rem; flex-wrap: wrap; }
 @keyframes pipeline-pulse { 50% { filter: brightness(1.2); } }
+.logout-form { margin: 0; }
+.logout-form button { padding: .48rem .72rem; border-color: rgba(255,255,255,.28); color: inherit; background: transparent; }
+.auth-shell { min-height: calc(100vh - 190px); display: grid; place-items: center; }
+.auth-card { width: min(100%, 430px); padding: 2rem; border: 1px solid #cfe0fa; border-radius: 22px; background: rgba(255,255,255,.92); box-shadow: 0 24px 70px rgba(44,82,140,.18); }
+.auth-symbol { width: 58px; height: 58px; display: grid; place-items: center; border-radius: 18px; color: #fff; font-size: 2rem; background: linear-gradient(135deg, var(--blue), var(--violet)); }
+.auth-eyebrow { margin: 1rem 0 .25rem; color: #5d70a3; font-size: .76rem; font-weight: 800; letter-spacing: .14em; }
+.auth-card h1 { margin-top: 0; }
+.auth-form { display: grid; gap: 1rem; margin-top: 1.2rem; }
+.auth-form label { display: grid; gap: .35rem; font-weight: 700; }
+.auth-form input { width: 100%; }
 
 .flag-suspicious, .flag-confirmed, .flag-rejected { margin: .75rem 0; padding: .85rem 1rem; border-radius: 12px; }
 .flag-suspicious { border: 1px solid #f2dc9b; border-left: 4px solid var(--amber); background: #fffaf0; }

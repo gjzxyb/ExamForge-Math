@@ -7,13 +7,15 @@ from html import escape
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, func
 
 from ..models import Problem, Method, SolutionInstance, MethodStatus, ReviewStatus
-from ..config.settings import init_settings_store
+from ..config.settings import get_settings, init_settings_store
 from .deps import ensure_init, get_session_dep, get_session
 
 
@@ -51,6 +53,7 @@ def _format_math_text(value: object) -> str:
 
 
 templates.env.filters["math_text"] = _format_math_text
+templates.env.globals["auth_enabled"] = lambda: get_settings().auth.enabled
 
 
 def _stats() -> dict:
@@ -78,6 +81,7 @@ def create_app(data_dir: Path) -> FastAPI:
     ensure_init(data_dir)
     init_settings_store(data_dir)  # 加载持久化设置
     app = FastAPI(title="ExamForge-Math")
+    auth_settings = get_settings().auth
     app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
     uploads_dir = data_dir / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -85,6 +89,32 @@ def create_app(data_dir: Path) -> FastAPI:
     app.state.data_dir = data_dir
     app.state.uploads_dir = uploads_dir
     app.state.templates = templates
+
+    from .auth import is_authenticated
+
+    class LoginRequiredMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            path = request.url.path
+            public = path in {"/login", "/setup", "/healthz"} or path.startswith("/static/")
+            if public or is_authenticated(request):
+                return await call_next(request)
+            accept = request.headers.get("accept", "")
+            if "text/html" not in accept and path.startswith(("/ingest/", "/review/", "/settings/")):
+                return JSONResponse({"detail": "请先登录"}, status_code=401)
+            from urllib.parse import quote
+            target = quote(path + (("?" + request.url.query) if request.url.query else ""), safe="")
+            return RedirectResponse(f"/login?next={target}", status_code=303)
+
+    app.add_middleware(LoginRequiredMiddleware)
+    # Starlette 按后添加的中间件在外层执行，因此 SessionMiddleware 必须最后添加，
+    # 才能保证访问控制读取 request.session 时会话已经完成解析。
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=auth_settings.session_secret,
+        same_site="lax",
+        https_only=False,
+        max_age=60 * 60 * 12,
+    )
 
     @app.exception_handler(Exception)
     async def _all_exc_handler(request: Request, exc: Exception):
@@ -127,7 +157,9 @@ def create_app(data_dir: Path) -> FastAPI:
         return {"ok": True}
 
     # 路由
+    from . import auth
     from .routes import ingest, methods as methods_route, review, report, qa, settings as settings_route
+    app.include_router(auth.router)
     app.include_router(ingest.router)
     app.include_router(methods_route.router)
     app.include_router(review.router)

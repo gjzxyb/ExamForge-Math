@@ -24,7 +24,7 @@ window.MathJax = {
     <span class="brand-mark">∑</span>
     <span class="brand-text"><strong>ExamForge</strong><small>数学方法引擎</small></span>
   </a>
-  <nav class="main-nav" aria-label="主导航">
+  {% if request.session.get('authenticated') or not auth_enabled() %}<nav class="main-nav" aria-label="主导航">
     <a class="nav-link {% if request.url.path == '/' %}is-active{% endif %}" href="/">首页</a>
     <a class="nav-link {% if request.url.path.startswith('/ingest') %}is-active{% endif %}" href="/ingest">录入</a>
     <a class="nav-link {% if request.url.path.startswith('/methods') %}is-active{% endif %}" href="/methods">方法库</a>
@@ -32,7 +32,9 @@ window.MathJax = {
     <a class="nav-link {% if request.url.path.startswith('/report') %}is-active{% endif %}" href="/report">报告</a>
     <a class="nav-link {% if request.url.path.startswith('/qa') %}is-active{% endif %}" href="/qa">问答</a>
     <a class="nav-link {% if request.url.path.startswith('/settings') %}is-active{% endif %}" href="/settings">设置</a>
+    <form method="post" action="/logout" class="logout-form"><button type="submit">退出</button></form>
   </nav>
+  {% endif %}
 </header>
 <main class="app-shell">
   {% block body %}{% endblock %}

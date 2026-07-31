@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}登录 · ExamForge{% endblock %}
+{% block body %}
+<section class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-symbol">∑</div>
+    <p class="auth-eyebrow">SECURE WORKSPACE</p>
+    <h1>登录 ExamForge</h1>
+    <p class="muted">登录后方可访问题目录入、方法库、审核、报告、问答与系统设置。</p>
+    {% if error %}<div class="flag-rejected">{{ error }}</div>{% endif %}
+    {% if needs_setup %}
+      <div class="flag-suspicious">首次运行需要先创建管理员账号。</div>
+      <a class="button-link" href="/setup">创建管理员账号</a>
+    {% else %}
+    <form method="post" action="/login" class="auth-form">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <label>用户名<input name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
+      <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">安全登录</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

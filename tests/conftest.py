@@ -1,5 +1,9 @@
 import pytest
+import os
 from pathlib import Path
+
+
+os.environ.setdefault("EXAMFORGE_AUTH_ENABLED", "false")
 
 
 @pytest.fixture

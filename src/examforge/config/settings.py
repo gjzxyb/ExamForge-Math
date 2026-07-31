@@ -7,6 +7,7 @@
 import json
 import os
 import threading
+import secrets
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -69,12 +70,22 @@ class OCRSettings:
 
 
 @dataclass
+class AuthSettings:
+    """Web 登录配置；密码以 PBKDF2 哈希保存，不落盘明文。"""
+    enabled: bool = True
+    username: str = "admin"
+    password_hash: str = ""
+    session_secret: str = ""
+
+
+@dataclass
 class Settings:
     llm: LLMSettings = field(default_factory=LLMSettings)
     model_control: ModelControlSettings = field(default_factory=ModelControlSettings)
     embedder: EmbedderSettings = field(default_factory=EmbedderSettings)
     web_search: WebSearchSettings = field(default_factory=WebSearchSettings)
     ocr: OCRSettings = field(default_factory=OCRSettings)
+    auth: AuthSettings = field(default_factory=AuthSettings)
 
     def to_dict(self) -> dict:
         return {
@@ -83,6 +94,7 @@ class Settings:
             "embedder": asdict(self.embedder),
             "web_search": asdict(self.web_search),
             "ocr": asdict(self.ocr),
+            "auth": asdict(self.auth),
         }
 
     @classmethod
@@ -93,6 +105,7 @@ class Settings:
             embedder=EmbedderSettings(**data.get("embedder", {})),
             web_search=WebSearchSettings(**data.get("web_search", {})),
             ocr=OCRSettings(**data.get("ocr", {})),
+            auth=AuthSettings(**data.get("auth", {})),
         )
 
 
@@ -118,6 +131,9 @@ class SettingsStore:
                 return
             self._settings = _from_env(self._settings)
             self._settings = self._load_from_disk(self._settings)
+            if not self._settings.auth.session_secret:
+                self._settings.auth.session_secret = secrets.token_urlsafe(48)
+                self._save_to_disk(self._settings)
             self._loaded = True
 
     def get(self) -> Settings:
@@ -142,6 +158,8 @@ class SettingsStore:
                     **asdict(cur.web_search), **kwargs["web_search"]})
             if "ocr" in kwargs:
                 cur.ocr = OCRSettings(**{**asdict(cur.ocr), **kwargs["ocr"]})
+            if "auth" in kwargs:
+                cur.auth = AuthSettings(**{**asdict(cur.auth), **kwargs["auth"]})
             self._save_to_disk(cur)
             return cur
 
@@ -227,6 +245,11 @@ def _from_env(s: Settings) -> Settings:
     _set("EXAMFORGE_OCR_KEY_SECRET", s.ocr, "access_key_secret")
     _set("EXAMFORGE_OCR_REGION", s.ocr, "region")
     _set("EXAMFORGE_OCR_ENDPOINT", s.ocr, "endpoint")
+
+    _set_bool("EXAMFORGE_AUTH_ENABLED", s.auth, "enabled")
+    _set("EXAMFORGE_AUTH_USERNAME", s.auth, "username")
+    _set("EXAMFORGE_AUTH_PASSWORD_HASH", s.auth, "password_hash")
+    _set("EXAMFORGE_SESSION_SECRET", s.auth, "session_secret")
 
     # 数值字段
     raw_dim = os.environ.get("EXAMFORGE_EMBED_DIM")
