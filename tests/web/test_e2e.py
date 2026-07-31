@@ -97,6 +97,39 @@ def test_e2e_ingest_generates_answer_when_missing(app_client):
     assert "1. 审题" in detail.text
 
 
+def test_e2e_ingest_persists_generated_analysis_when_answer_is_supplied(app_client):
+    from examforge.repositories import problem_repo, make_fingerprint
+
+    stem = "已知函数 f(x)=x^3-3x，且最终答案为 a=2，请写出详细证明。"
+    response = app_client.post("/ingest", data={
+        "year": 2026,
+        "region": "已有简答测试卷",
+        "subject_area": "导数",
+        "stem": stem,
+        "answer": "a=2",
+        "reference": "旧字段参考答案：a=2",
+        "official_analysis_steps": "",
+        "source": "generated analysis persistence e2e",
+    })
+
+    assert response.status_code == 200
+    fingerprint = make_fingerprint(stem, 2026, "已有简答测试卷")
+    problem = problem_repo().find_by_fingerprint(fingerprint)
+    assert problem is not None
+    assert problem.answer == "a=2"
+    assert problem.official_analysis_steps
+    assert "1. 审题" in problem.official_analysis_steps
+    assert problem.reference_solution == problem.official_analysis_steps
+
+    review = app_client.get("/review")
+    assert "a=2" in review.text
+    assert "1. 审题" in review.text
+
+    detail = app_client.get(f"/problems/{problem.id}")
+    assert "a=2" in detail.text
+    assert "1. 审题" in detail.text
+
+
 def test_e2e_methods_list_renders(app_client):
     r = app_client.get("/methods?area=导数")
     assert r.status_code == 200

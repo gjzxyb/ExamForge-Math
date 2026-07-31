@@ -195,31 +195,42 @@ async def submit(
         answer = (answer or "").strip()
         official_analysis_steps = (official_analysis_steps or "").strip()
         reference = (reference or "").strip()
-        reference_solution = official_analysis_steps or reference or None
-        if not answer:
+        generation_reference_parts = []
+        if answer:
+            generation_reference_parts.append(f"已知最终答案：\n{answer}")
+        if official_analysis_steps:
+            generation_reference_parts.append(f"人工填写的解析：\n{official_analysis_steps}")
+        if reference:
+            generation_reference_parts.append(f"补充参考：\n{reference}")
+        generation_reference = "\n\n".join(generation_reference_parts) or None
+
+        # 最终答案或详细解析任一缺失时都调用生成接口。此前只检查 answer，
+        # 导致用户填写简答/旧 reference 后，生成的详细步骤没有被持久化。
+        if not answer or not official_analysis_steps:
             generated, answer_generation_warning, answer_search_notice = _generate_missing_answer_fail_open(
                 llm,
                 stem_latex=stem,
                 subject_area=subject_area,
-                reference_solution=reference_solution,
+                reference_solution=generation_reference,
             )
             generated_answer = (generated.answer or "").strip()
             generated_answer_steps = (generated.analysis_steps or "").strip()
             generated_answer_confidence = generated.confidence
-            if generated_answer:
+            if generated_answer and not answer:
                 answer = generated_answer
-            if generated_answer_steps and not reference_solution:
-                # 自动生成的详细推导必须随题目持久化，供审核队列和例题详情复用。
+            if generated_answer_steps and not official_analysis_steps:
                 official_analysis_steps = generated_answer_steps
-                reference_solution = generated_answer_steps
-            elif not reference_solution and generated_answer:
+            elif not official_analysis_steps:
                 # 兼容少数只返回最终答案、不返回 analysis_steps 的模型。
-                reference_solution = generated_answer
+                official_analysis_steps = reference or generated_answer or answer
+
+        # reference_solution 是旧版兼容字段；新生成的详细解析应优先于简短参考答案。
+        reference_solution = official_analysis_steps or reference or answer or None
         p = ingest_problem(
             stem_latex=stem, year=year, region=region,
             subject_area=subject_area, reference_solution=reference_solution,
             answer=answer or None,
-            official_analysis_steps=official_analysis_steps or reference or generated_answer_steps or None,
+            official_analysis_steps=official_analysis_steps or None,
             sub_knowledge=sub_knowledge,
             problem_type_tags=problem_type_tags,
             image_ref=image_ref,
