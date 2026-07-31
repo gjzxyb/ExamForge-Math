@@ -278,6 +278,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .analysis-card { background: #fbfdff; }
 .compact-analysis { font-size: .95em; }
 .generated-analysis { margin-top: .55rem; background: #fff; }
+.ingest-progress { margin: 1rem 0; padding: 1rem 1.1rem; border: 1px solid #bfd5fb; border-radius: 14px; background: linear-gradient(135deg, #f4f8ff, #fff); box-shadow: var(--shadow); }
+.ingest-progress-heading { display: flex; justify-content: space-between; gap: 1rem; color: #235eac; }
+.pipeline-progress-track { height: 8px; margin: .8rem 0; overflow: hidden; border-radius: 999px; background: #dfe9f7; }
+.pipeline-progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--violet)); transition: width .45s ease; animation: pipeline-pulse 1.6s ease-in-out infinite; }
+.ingest-progress.completed { border-color: #a9dfc2; background: #f5fff9; }
+.ingest-progress.failed { border-color: #efb8c1; background: #fff7f8; }
+#ingest-result-links { display: flex; gap: .7rem; flex-wrap: wrap; }
+@keyframes pipeline-pulse { 50% { filter: brightness(1.2); } }
 
 .flag-suspicious, .flag-confirmed, .flag-rejected { margin: .75rem 0; padding: .85rem 1rem; border-radius: 12px; }
 .flag-suspicious { border: 1px solid #f2dc9b; border-left: 4px solid var(--amber); background: #fffaf0; }

@@ -1,6 +1,9 @@
-"""题目录入路由:GET 表单 + POST 端到端管线。"""
+"""题目录入路由:GET 表单 + 后台端到端管线。"""
 
-from fastapi import APIRouter, Request, Form, Depends, UploadFile, File
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from threading import Lock
+from fastapi import APIRouter, Request, Form, Depends, UploadFile, File, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel import Session
 from pathlib import Path
@@ -8,11 +11,105 @@ from uuid import uuid4
 
 from ..deps import get_session_dep, problem_repo_dep, llm_dep, embedder_dep, config_dep
 from ..app import templates
-from ...models import SubjectArea
+from ...models import Problem, SubjectArea
 from ...pipeline import ingest_problem, run_pipeline
 
 
 router = APIRouter()
+
+
+@dataclass
+class IngestJob:
+    id: str
+    problem_id: int
+    status: str = "queued"
+    stage: str = "题目已保存，等待后台管线"
+    error: str = ""
+    queued_count: int = 0
+    llm_backend: str = ""
+    created_at: str = ""
+    finished_at: str = ""
+
+
+_ingest_jobs: dict[str, IngestJob] = {}
+_ingest_jobs_lock = Lock()
+
+
+def _update_ingest_job(job_id: str, **values) -> None:
+    with _ingest_jobs_lock:
+        job = _ingest_jobs.get(job_id)
+        if job is None:
+            return
+        for key, value in values.items():
+            setattr(job, key, value)
+
+
+def _run_ingest_job(job_id: str, problem_id: int) -> None:
+    """在线程池中生成答案并运行管线，避免 HTTP 请求长时间悬挂。"""
+    from ...config import get_config
+    from ...embedding import get_embedder
+    from ...llm import get_llm
+    from ...repositories import get_engine
+
+    session = Session(get_engine())
+    try:
+        problem = session.get(Problem, problem_id)
+        if problem is None:
+            raise RuntimeError(f"题目 #{problem_id} 不存在")
+
+        llm = get_llm()
+        answer = (problem.answer or "").strip()
+        analysis = (problem.official_analysis_steps or "").strip()
+        reference = (problem.reference_solution or "").strip()
+        if not answer or not analysis:
+            _update_ingest_job(job_id, status="running", stage="正在调用 API 生成详细答案")
+            generated, warning, _ = _generate_missing_answer_fail_open(
+                llm,
+                stem_latex=problem.stem_latex,
+                subject_area=problem.subject_area.value,
+                reference_solution=reference or answer or None,
+            )
+            if not answer:
+                answer = (generated.answer or "").strip()
+            if not analysis:
+                analysis = (generated.analysis_steps or "").strip() or reference or answer
+            problem.answer = answer or None
+            problem.official_analysis_steps = analysis or None
+            problem.reference_solution = analysis or reference or answer or None
+            session.add(problem)
+            session.commit()
+            session.refresh(problem)
+            if warning:
+                _update_ingest_job(job_id, stage="真实 API 失败，已保存兜底答案；正在提炼方法")
+
+        _update_ingest_job(job_id, status="running", stage="答案已保存，正在提炼并分类解题方法")
+        result = run_pipeline(
+            problem,
+            session=session,
+            llm=llm,
+            embedder=get_embedder(),
+            config=get_config(),
+            force_review=True,
+        )
+        _update_ingest_job(
+            job_id,
+            status="completed",
+            stage="管线完成，答案与解析已进入审核队列",
+            queued_count=len(result.suspicions),
+            llm_backend=result.llm_backend_used,
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+    except Exception as exc:
+        session.rollback()
+        _update_ingest_job(
+            job_id,
+            status="failed",
+            stage="后台管线执行失败",
+            error=_friendly_llm_error(exc),
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+    finally:
+        session.close()
 
 
 def _friendly_llm_error(exc: Exception) -> str:
@@ -161,6 +258,72 @@ async def recognize_formula_image(
             "ok": False,
             "error": f"{type(e).__name__}: {e}",
         }, status_code=200)
+
+
+@router.post("/ingest/start")
+async def start_background_ingest(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    year: int = Form(...),
+    region: str = Form(...),
+    subject_area: str = Form(...),
+    stem: str = Form(...),
+    figure: UploadFile | None = File(None),
+    answer: str = Form(""),
+    official_analysis_steps: str = Form(""),
+    sub_knowledge: str = Form(""),
+    problem_type_tags: str = Form(""),
+    reference: str = Form(""),
+    source: str = Form(""),
+    p_repo=Depends(problem_repo_dep),
+):
+    """先持久化题目并立即响应，耗时的 LLM/管线转入后台线程。"""
+    image_ref = await _save_figure_upload(request, figure)
+    answer = (answer or "").strip()
+    official_analysis_steps = (official_analysis_steps or "").strip()
+    reference = (reference or "").strip()
+    problem = ingest_problem(
+        stem_latex=stem,
+        year=year,
+        region=region,
+        subject_area=subject_area,
+        reference_solution=official_analysis_steps or reference or answer or None,
+        answer=answer or None,
+        official_analysis_steps=official_analysis_steps or None,
+        sub_knowledge=sub_knowledge,
+        problem_type_tags=problem_type_tags,
+        image_ref=image_ref,
+        source=source,
+        repo=p_repo,
+    )
+    job_id = uuid4().hex
+    job = IngestJob(
+        id=job_id,
+        problem_id=problem.id,
+        created_at=datetime.now(timezone.utc).isoformat(),
+    )
+    with _ingest_jobs_lock:
+        _ingest_jobs[job_id] = job
+    background_tasks.add_task(_run_ingest_job, job_id, problem.id)
+    return JSONResponse(
+        {
+            "ok": True,
+            "job_id": job_id,
+            "problem_id": problem.id,
+            "status_url": f"/ingest/jobs/{job_id}",
+        },
+        status_code=202,
+    )
+
+
+@router.get("/ingest/jobs/{job_id}")
+async def get_ingest_job(job_id: str):
+    with _ingest_jobs_lock:
+        job = _ingest_jobs.get(job_id)
+        payload = asdict(job) if job else None
+    if payload is None:
+        return JSONResponse({"ok": False, "error": "任务不存在或服务已重启"}, status_code=404)
+    return JSONResponse({"ok": True, **payload})
 
 
 @router.post("/ingest", response_class=HTMLResponse)

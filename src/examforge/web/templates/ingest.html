@@ -47,7 +47,7 @@
   </section>
 </div>
 
-<form method="post" action="/ingest" enctype="multipart/form-data" class="ingest-form">
+<form id="ingest-form" method="post" action="/ingest" enctype="multipart/form-data" class="ingest-form">
   <fieldset>
     <legend>基础信息</legend>
     <div class="form-row">
@@ -123,8 +123,21 @@
     </label></p>
   </fieldset>
 
-  <p><button type="submit">提交并跑管线</button></p>
+  <p><button id="ingest-submit" type="submit">提交并跑管线</button></p>
 </form>
+<section id="ingest-progress" class="ingest-progress" hidden aria-live="polite">
+  <div class="ingest-progress-heading">
+    <strong>后台管线正在运行</strong>
+    <span id="ingest-elapsed">0 秒</span>
+  </div>
+  <div class="pipeline-progress-track"><span id="ingest-progress-bar"></span></div>
+  <p id="ingest-stage">正在保存题目…</p>
+  <p class="muted">页面现在可以正常响应。请保留此页，完成后可直接打开审核队列或例题详情。</p>
+  <div id="ingest-result-links" hidden>
+    <a class="button-link" href="/review">打开审核队列</a>
+    <a id="ingest-problem-link" class="button-link secondary-action" href="#">打开例题详情</a>
+  </div>
+</section>
 <p style="color:#666">提交后会跑 Ingest→Extract→Classify→Review→Commit。可疑项会出现在 <a href="/review">审核队列</a>。</p>
 
 <script>
@@ -336,9 +349,73 @@ function attachPasteImageOcr() {
   });
 }
 
+function attachBackgroundIngest() {
+  const form = document.getElementById("ingest-form");
+  const button = document.getElementById("ingest-submit");
+  const panel = document.getElementById("ingest-progress");
+  const stage = document.getElementById("ingest-stage");
+  const elapsed = document.getElementById("ingest-elapsed");
+  const bar = document.getElementById("ingest-progress-bar");
+  const links = document.getElementById("ingest-result-links");
+  const problemLink = document.getElementById("ingest-problem-link");
+  if (!form || !window.fetch) return;
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    button.disabled = true;
+    button.textContent = "正在提交…";
+    panel.hidden = false;
+    links.hidden = true;
+    stage.textContent = "正在保存题目并创建后台任务…";
+    bar.style.width = "8%";
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      elapsed.textContent = Math.floor((Date.now() - started) / 1000) + " 秒";
+    }, 1000);
+
+    try {
+      const response = await fetch("/ingest/start", {
+        method: "POST",
+        body: new FormData(form),
+      });
+      const startedJob = await response.json();
+      if (!response.ok || !startedJob.ok) throw new Error(startedJob.error || "创建任务失败");
+      problemLink.href = "/problems/" + startedJob.problem_id;
+      button.textContent = "后台处理中…";
+
+      while (true) {
+        await new Promise(resolve => window.setTimeout(resolve, 1500));
+        const statusResponse = await fetch(startedJob.status_url, { cache: "no-store" });
+        const job = await statusResponse.json();
+        if (!statusResponse.ok || !job.ok) throw new Error(job.error || "读取任务状态失败");
+        stage.textContent = job.stage;
+        bar.style.width = job.status === "queued" ? "15%" : job.status === "running" ? "62%" : "100%";
+        if (job.status === "completed") {
+          stage.textContent = job.stage + "（待审核 " + job.queued_count + " 条）";
+          panel.classList.add("completed");
+          links.hidden = false;
+          button.disabled = false;
+          button.textContent = "继续录入下一题";
+          break;
+        }
+        if (job.status === "failed") throw new Error(job.error || "后台管线失败");
+      }
+    } catch (error) {
+      panel.classList.add("failed");
+      stage.textContent = "✗ " + error.message;
+      bar.style.width = "100%";
+      button.disabled = false;
+      button.textContent = "重新提交并跑管线";
+    } finally {
+      window.clearInterval(timer);
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   attachPasteImageOcr();
   attachFigurePasteUpload();
+  attachBackgroundIngest();
   const stem = document.querySelector('textarea[name="stem"]');
   if (stem) stem.addEventListener("input", scheduleStemMathPreview);
   renderStemMathPreview();

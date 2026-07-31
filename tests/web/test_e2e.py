@@ -47,6 +47,35 @@ def test_e2e_ingest_runs_pipeline(app_client):
     assert "新录入题目默认进入审核队列" in review.text
 
 
+def test_e2e_background_ingest_reports_progress_and_persists_answer(app_client):
+    import time
+
+    response = app_client.post("/ingest/start", data={
+        "year": 2026,
+        "region": "后台任务测试卷",
+        "subject_area": "导数",
+        "stem": "若对任意实数 x，x^3-3x >= -a 恒成立，求 a。",
+        "answer": "",
+        "official_analysis_steps": "",
+    })
+    assert response.status_code == 202
+    started = response.json()
+    assert started["ok"] is True
+
+    status = None
+    for _ in range(30):
+        status = app_client.get(started["status_url"]).json()
+        if status["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.05)
+
+    assert status["status"] == "completed"
+    assert status["queued_count"] >= 1
+    detail = app_client.get(f'/problems/{started["problem_id"]}')
+    assert "自动生成占位答案" in detail.text
+    assert "1. 审题" in detail.text
+
+
 def test_e2e_qa_returns_answer(app_client):
     r = app_client.post("/qa", data={
         "question": "含参不等式恒成立问题怎么做?",
