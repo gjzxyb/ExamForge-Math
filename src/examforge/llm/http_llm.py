@@ -8,7 +8,7 @@ import json
 import os
 from typing import Any
 import httpx
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 from .schemas import ExtractedSolution, ReportedSections, QAResult, GeneratedAnswer
 
 
@@ -18,6 +18,7 @@ DEFAULT_MODEL = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
 MIN_HTTP_LLM_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_MIN_TIMEOUT", "180"))
 HTTP_LLM_CONNECT_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_CONNECT_TIMEOUT", "15"))
 HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30"))
+MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "8192"))
 
 
 def effective_llm_timeout(timeout: float | int | str | None) -> float:
@@ -70,6 +71,17 @@ def _validate_llm_json(content: str, schema_model: type) -> Any:
         # 保留原始错误路径,让 Pydantic 报 JSON 解析错误。
         return TypeAdapter(schema_model).validate_json(content)
     return TypeAdapter(schema_model).validate_python(_normalize_llm_json_payload(data))
+
+
+def _json_validation_message(exc: ValidationError, *, finish_reason: str | None) -> str:
+    """把模型截断导致的 Pydantic JSON 错误转换为可重试、可读的错误。"""
+    detail = str(exc)
+    truncated = finish_reason == "length" or any(marker in detail for marker in (
+        "EOF while parsing", "EOF while parsing a string", "json_eof",
+    ))
+    if truncated:
+        return "LLM 输出达到长度上限，返回的 JSON 被截断；系统将增大输出上限后重试"
+    return f"LLM 返回的 JSON 格式无效: {detail[:400]}"
 
 class LLMHttpError(RuntimeError):
     """HTTP LLM 调不通时抛此异常(替代裸 tenacity.RetryError,语义清晰)。"""
@@ -146,6 +158,12 @@ class HttpLLM:
         last_err: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
+                request_max_tokens = None
+                if max_tokens:
+                    request_max_tokens = min(
+                        max_tokens * (2 ** attempt),
+                        MAX_JSON_OUTPUT_TOKENS,
+                    )
                 resp = self._client.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,
@@ -157,7 +175,7 @@ class HttpLLM:
                         ],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.2,
-                        **({"max_tokens": max_tokens} if max_tokens else {}),
+                        **({"max_tokens": request_max_tokens} if request_max_tokens else {}),
                     },
                 )
                 # 4xx/5xx 不抛,手工 raise 以便带 status
@@ -168,8 +186,23 @@ class HttpLLM:
                         body=resp.text,
                         request_url=str(resp.request.url),
                     )
-                content = resp.json()["choices"][0]["message"]["content"]
-                return _validate_llm_json(content, schema_model)
+                choice = resp.json()["choices"][0]
+                content = choice["message"]["content"]
+                try:
+                    return _validate_llm_json(content, schema_model)
+                except ValidationError as exc:
+                    last_err = LLMHttpError(
+                        _json_validation_message(
+                            exc,
+                            finish_reason=choice.get("finish_reason"),
+                        ),
+                        request_url=str(resp.request.url),
+                    )
+                    if attempt < self._max_retries:
+                        import time
+                        time.sleep(2 ** attempt)
+                        continue
+                    raise last_err
             except LLMHttpError as e:
                 last_err = e
                 # 4xx(认证、参数错)立即失败,不再 retry

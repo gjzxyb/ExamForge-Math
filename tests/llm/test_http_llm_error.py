@@ -112,6 +112,86 @@ def test_http_llm_chat_json_accepts_real_model_empty_string_secondary_theorems()
     assert out.methods[0].secondary_theorems == []
 
 
+def test_http_llm_retries_truncated_generated_answer_with_more_tokens(monkeypatch):
+    from examforge.llm.http_llm import HttpLLM
+    from examforge.llm.schemas import GeneratedAnswer
+
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    requests = []
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        text = "ok"
+        request = FakeRequest()
+
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            requests.append(kwargs["json"])
+            if len(requests) == 1:
+                return FakeResponse({"choices": [{
+                    "finish_reason": "length",
+                    "message": {"content": '{"answer":"$a=2$","analysis_steps":"未完成'},
+                }]})
+            return FakeResponse({"choices": [{
+                "finish_reason": "stop",
+                "message": {"content": '{"answer":"$a=2$","analysis_steps":"完整步骤","confidence":0.8}'},
+            }]})
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", max_retries=2)
+    llm._client = FakeClient()
+    out = llm._chat_json(
+        system="s", user="u", schema_model=GeneratedAnswer, max_tokens=4096,
+    )
+
+    assert out.answer == "$a=2$"
+    assert out.analysis_steps == "完整步骤"
+    assert [request["max_tokens"] for request in requests] == [4096, 8192]
+
+
+def test_http_llm_reports_truncated_json_as_friendly_error(monkeypatch):
+    from examforge.llm.http_llm import HttpLLM
+    from examforge.llm.schemas import GeneratedAnswer
+
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        text = "ok"
+        request = FakeRequest()
+
+        def json(self):
+            return {"choices": [{
+                "finish_reason": "length",
+                "message": {"content": '{"answer":"$a=2$","analysis_steps":"未完成'},
+            }]}
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", max_retries=1)
+    llm._client = FakeClient()
+    with pytest.raises(LLMHttpError) as caught:
+        llm._chat_json(
+            system="s", user="u", schema_model=GeneratedAnswer, max_tokens=4096,
+        )
+
+    assert "JSON 被截断" in caught.value.as_user_message()
+    assert "ValidationError" not in caught.value.as_user_message()
+
+
 def test_llm_http_error_includes_request_error_message_without_status():
     e = LLMHttpError(
         "LLM 请求超时: 请求超过 3 秒未返回",
