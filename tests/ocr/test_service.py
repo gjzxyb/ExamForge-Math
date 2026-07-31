@@ -169,3 +169,43 @@ def test_format_math_ocr_text_repairs_geometry_commands_and_symbols():
     assert "Ⅱ" not in formatted
     assert "∥" not in formatted
     assert "⊥" not in formatted
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (r"由题意，\left(x_2>0\right。故结论成立。", r"$\left(x_2>0\right)$。"),
+        (r"由题意，x_2>0\right。故结论成立。", r"$x_2>0$。"),
+        (r"由题意，\left(x_2>0\right）故结论成立。", r"$\left(x_2>0\right)$"),
+        (r"由题意，\left(x_2>0。故结论成立。", r"$\left(x_2>0\right)$。"),
+    ],
+)
+def test_format_math_ocr_text_repairs_invalid_left_right_delimiters(raw, expected):
+    formatted = format_math_ocr_text(raw)
+
+    assert expected in formatted
+    assert r"\right。" not in formatted
+    assert r"\right）" not in formatted
+
+
+def test_format_math_ocr_text_degrades_unpaired_scalable_commands():
+    left_only = format_math_ocr_text(r"分别考察 \left[x>0 的情况。")
+    right_only = format_math_ocr_text(r"由 x_2>0\right) 得到结论。")
+
+    assert r"\left" not in left_only
+    assert r"\right" not in right_only
+    assert "Missing or unrecognized delimiter" not in left_only + right_only
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        r"${x_2>0\right。",
+        r"$x_2>0\right。",
+    ],
+)
+def test_format_math_ocr_text_closes_vendor_inline_math(raw):
+    formatted = format_math_ocr_text(raw)
+
+    assert formatted == r"$x_2>0$。"
+    assert formatted.count("$") == 2

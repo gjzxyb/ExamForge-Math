@@ -49,6 +49,131 @@ def _repair_geometry_latex(text: str) -> str:
     return _separate_geometry_commands(text)
 
 
+_SCALABLE_DELIMITER_TOKEN = (
+    r"(?:\\(?:langle|rangle|lbrace|rbrace|vert|Vert)|"
+    r"\\[{}|]|\(|\)|\[|\]|\||\.|<|>)"
+)
+_SCALABLE_COMMAND_RE = re.compile(
+    rf"\\(?P<side>left|right)[ \t]*(?P<delimiter>{_SCALABLE_DELIMITER_TOKEN})"
+)
+_SCALABLE_OPEN_RE = r"(?:\(|\[|\\\{|\\langle|\\lbrace|\||\\vert|\\Vert)"
+_SCALABLE_CLOSE_BY_OPEN = {
+    "(": ")",
+    "[": "]",
+    r"\{": r"\}",
+    r"\langle": r"\rangle",
+    r"\lbrace": r"\rbrace",
+    "|": "|",
+    r"\vert": r"\vert",
+    r"\Vert": r"\Vert",
+}
+_SCALABLE_DELIMITER_ALIASES = {
+    "（": "(",
+    "）": ")",
+    "［": "[",
+    "］": "]",
+    "【": "[",
+    "】": "]",
+    "｛": r"\{",
+    "｝": r"\}",
+}
+
+
+def _balance_scalable_delimiters(text: str) -> str:
+    """把未成对的 ``\\left``/``\\right`` 降级为普通括号，避免 MathJax 报错。"""
+    stack: list[re.Match[str]] = []
+    replacements: list[tuple[int, int, str]] = []
+    for match in _SCALABLE_COMMAND_RE.finditer(text):
+        if match.group("side") == "left":
+            stack.append(match)
+        elif stack:
+            stack.pop()
+        else:
+            replacements.append((match.start(), match.end(), match.group("delimiter")))
+    replacements.extend(
+        (match.start(), match.end(), match.group("delimiter"))
+        for match in stack
+    )
+    for start, end, delimiter in sorted(replacements, reverse=True):
+        text = text[:start] + delimiter + text[end:]
+    return text
+
+
+def _repair_scalable_delimiters(text: str) -> str:
+    """修复 OCR 常见的中文括号及 ``\\right。`` 等非法伸缩定界符。"""
+    text = re.sub(
+        r"\\(left|right)[ \t]*([（）［］【】｛｝])",
+        lambda match: (
+            f"\\{match.group(1)}"
+            f"{_SCALABLE_DELIMITER_ALIASES[match.group(2)]}"
+        ),
+        text,
+    )
+
+    # OCR 常把右括号识别成句号：``\\left(...\\right。``。
+    # 能找到左定界符时补回匹配的右定界符，并把中文标点保留在公式外。
+    malformed_right = re.compile(
+        rf"\\left(?P<open>{_SCALABLE_OPEN_RE})"
+        r"(?P<body>(?:(?!\\left).)*?)"
+        r"\\right[ \t]*(?P<punct>[，。；：！？、])",
+        re.DOTALL,
+    )
+
+    def close_before_punctuation(match: re.Match[str]) -> str:
+        opening = match.group("open")
+        closing = _SCALABLE_CLOSE_BY_OPEN.get(opening, ")")
+        return (
+            f"\\left{opening}{match.group('body')}"
+            f"\\right{closing}{match.group('punct')}"
+        )
+
+    text = malformed_right.sub(close_before_punctuation, text)
+
+    # 左括号存在但右命令完全丢失时，仅在明确的句末标点前补齐，
+    # 避免把区间内部的中文逗号误判成结束符。
+    missing_right = re.compile(
+        rf"\\left(?P<open>{_SCALABLE_OPEN_RE})"
+        r"(?P<body>(?:(?!\\left|\\right)[^\n\u3400-\u9fff])*?)"
+        r"(?P<punct>[。；！？])"
+    )
+    text = missing_right.sub(close_before_punctuation, text)
+
+    # 没有左定界符可配对的 ``\\right。`` 直接移除命令，保留句号。
+    text = re.sub(r"\\(?:left|right)[ \t]*(?=[，。；：！？、])", "", text)
+
+    # 已经含有 $...$ 的片段分别检查，防止跨公式错误配对。
+    parts = _DELIMITED_MATH.split(text)
+    return "".join(
+        _balance_scalable_delimiters(part)
+        for part in parts
+    )
+
+
+def _close_unmatched_inline_math(text: str) -> str:
+    """闭合 OCR 遗漏的行内 ``$``，并把句末标点移到公式外。"""
+    dollar_positions = [
+        match.start()
+        for match in re.finditer(r"(?<!\\)\$", text)
+    ]
+    if len(dollar_positions) % 2 == 0:
+        return text
+
+    start = dollar_positions[-1]
+    tail = text[start + 1:]
+    punctuation = re.search(r"[，。；：！？、]", tail)
+    if punctuation:
+        body = tail[:punctuation.start()]
+        remainder = tail[punctuation.start():]
+    else:
+        body = tail
+        remainder = ""
+
+    # 部分 OCR 会产生 ``${x>0``，这里的孤立左花括号不是有效分组。
+    if body.startswith("{") and body.count("{") > body.count("}"):
+        body = body[1:]
+    return f"{text[:start + 1]}{body}${remainder}"
+
+
 def _compact_latex(text: str) -> str:
     text = re.sub(
         r"\\(operatorname|mathrm|mathbf|mathit|mathcal|mathbb|text)"
@@ -168,6 +293,7 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = text.replace("∞", r"\infty")
     text = text.replace("≥", r"\ge ").replace("≤", r"\le ").replace("≠", r"\ne ")
     text = _repair_geometry_latex(text)
+    text = _repair_scalable_delimiters(text)
     text = _compact_latex(text)
     text = _repair_sequence_subscripts(text)
     text = re.sub(r"([A-Za-z]\\?\([^()\n]*\))[ \t]*\)", r"\1", text)
@@ -209,4 +335,5 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = _wrap_math_runs(text)
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=\$)", "", text)
     text = re.sub(rf"(?<=\$)[ \t]+(?=[{_CJK}，。；：！？、（])", "", text)
+    text = _close_unmatched_inline_math(text)
     return text.strip()
