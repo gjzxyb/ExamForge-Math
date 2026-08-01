@@ -120,8 +120,17 @@ install_uv() {
 prepare_repo() {
     if [[ -d "$INSTALL_DIR/.git" ]]; then
         info "更新已有仓库"
-        [[ -z "$(git -C "$INSTALL_DIR" status --porcelain)" ]] \
-            || die "$INSTALL_DIR 存在未提交修改，为避免覆盖已停止部署"
+        # 云服务器上的临时改动不参与发布：仅暂存已跟踪文件，.env/data 等
+        # 未跟踪运行数据保持原位。暂存不自动恢复，避免旧改动重新覆盖新版代码。
+        if ! git -C "$INSTALL_DIR" diff --quiet \
+            || ! git -C "$INSTALL_DIR" diff --cached --quiet; then
+            local stash_message stash_ref
+            stash_message="examforge-deploy-backup-$(date +%Y%m%d-%H%M%S)"
+            warn "检测到服务器未提交修改，自动备份后继续更新（不会恢复到运行目录）"
+            git -C "$INSTALL_DIR" stash push -m "$stash_message" >/dev/null
+            stash_ref="$(git -C "$INSTALL_DIR" stash list -1 --format='%gd')"
+            ok "服务器修改已备份到 ${stash_ref:-git stash}"
+        fi
         git -C "$INSTALL_DIR" fetch --prune origin
         git -C "$INSTALL_DIR" pull --ff-only
     elif [[ -e "$INSTALL_DIR" ]] && [[ -n "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
