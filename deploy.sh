@@ -24,6 +24,7 @@ LLM_BASE_URL="${LLM_BASE_URL:-https://api.deepseek.com/v1}"
 LLM_API_KEY="${LLM_API_KEY:-}"
 LLM_MODEL="${LLM_MODEL:-deepseek-chat}"
 LLM_TIMEOUT="${LLM_TIMEOUT:-300}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 SKIP_SYSTEM_DEPS="${SKIP_SYSTEM_DEPS:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
@@ -47,6 +48,7 @@ ExamForge-Math Linux 一键部署/更新脚本
   --llm-key KEY        配置 DeepSeek/OpenAI 兼容 API Key，并启用 http 后端
   --llm-base URL       LLM Base URL
   --llm-model MODEL    模型名称
+  --python VERSION     Python 版本，默认 3.12
   --skip-tests         跳过部署前测试
   --skip-system-deps   跳过系统依赖安装
   --non-interactive    非交互部署，自动安装并启动 systemd 服务
@@ -65,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         --llm-key) LLM_API_KEY="$2"; LLM_BACKEND="http"; shift 2 ;;
         --llm-base) LLM_BASE_URL="$2"; shift 2 ;;
         --llm-model) LLM_MODEL="$2"; shift 2 ;;
+        --python) PYTHON_VERSION="$2"; shift 2 ;;
         --skip-tests) SKIP_TESTS=1; shift ;;
         --skip-system-deps) SKIP_SYSTEM_DEPS=1; shift ;;
         --non-interactive) NON_INTERACTIVE=1; shift ;;
@@ -131,8 +134,9 @@ prepare_repo() {
 }
 
 sync_dependencies() {
-    info "同步 Python 依赖"
-    (cd "$INSTALL_DIR" && uv sync --frozen)
+    info "使用 Python ${PYTHON_VERSION} 同步 Python 依赖"
+    (cd "$INSTALL_DIR" && uv python install "$PYTHON_VERSION")
+    (cd "$INSTALL_DIR" && uv sync --frozen --python "$PYTHON_VERSION")
     ok "Python 依赖同步完成"
 }
 
@@ -185,7 +189,7 @@ initialize_data() {
 }
 
 configure_runtime_llm() {
-    [[ -n "$LLM_API_KEY" ]] || return
+    [[ -n "$LLM_API_KEY" ]] || return 0
     info "把真实 LLM 配置写入持久化 settings.json"
     pushd "$INSTALL_DIR" >/dev/null
     EXAMFORGE_DEPLOY_DATA_DIR="$DATA_DIR" \
