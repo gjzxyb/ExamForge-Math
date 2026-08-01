@@ -28,6 +28,8 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 SKIP_SYSTEM_DEPS="${SKIP_SYSTEM_DEPS:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
+GIT_RETRY_ATTEMPTS="${GIT_RETRY_ATTEMPTS:-5}"
+ALLOW_OFFLINE_DEPLOY="${ALLOW_OFFLINE_DEPLOY:-1}"
 
 refresh_paths() {
     ENV_FILE="${ENV_FILE_OVERRIDE:-$INSTALL_DIR/.env}"
@@ -84,6 +86,29 @@ as_root() {
     if [[ ${EUID} -eq 0 ]]; then "$@"; else sudo "$@"; fi
 }
 
+git_network_retry() {
+    local label="$1" attempt delay
+    shift
+    for ((attempt = 1; attempt <= GIT_RETRY_ATTEMPTS; attempt++)); do
+        info "${label}（第 ${attempt}/${GIT_RETRY_ATTEMPTS} 次）"
+        # 强制 HTTP/1.1 与 TLS 1.2，规避部分国内云网络上的 GnuTLS -110。
+        if GIT_TERMINAL_PROMPT=0 git \
+            -c http.version=HTTP/1.1 \
+            -c http.sslVersion=tlsv1.2 \
+            -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=60 \
+            "$@"; then
+            return 0
+        fi
+        if (( attempt < GIT_RETRY_ATTEMPTS )); then
+            delay=$((attempt * 3))
+            warn "${label}失败，${delay} 秒后重试"
+            sleep "$delay"
+        fi
+    done
+    return 1
+}
+
 detect_pkg_manager() {
     if command -v apt-get >/dev/null 2>&1; then echo apt
     elif command -v dnf >/dev/null 2>&1; then echo dnf
@@ -131,13 +156,22 @@ prepare_repo() {
             stash_ref="$(git -C "$INSTALL_DIR" stash list -1 --format='%gd')"
             ok "服务器修改已备份到 ${stash_ref:-git stash}"
         fi
-        git -C "$INSTALL_DIR" fetch --prune origin
-        git -C "$INSTALL_DIR" pull --ff-only
+        if git_network_retry "从 GitHub 获取更新" \
+            -C "$INSTALL_DIR" fetch --prune origin main; then
+            # fetch 已完成网络传输，直接合并远端引用，避免 pull 再请求一次 GitHub。
+            git -C "$INSTALL_DIR" merge --ff-only origin/main
+        elif [[ "$ALLOW_OFFLINE_DEPLOY" == 1 ]]; then
+            warn "GitHub TLS 连接连续失败，暂用本机现有版本继续部署"
+            warn "网络恢复后重新运行 bash deploy.sh 即可更新代码"
+        else
+            die "无法连接 GitHub；请检查服务器网络、DNS、代理后重试"
+        fi
     elif [[ -e "$INSTALL_DIR" ]] && [[ -n "$(find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
         die "$INSTALL_DIR 已存在且不是空目录/Git 仓库"
     else
         info "克隆仓库到 $INSTALL_DIR"
-        git clone "$REPO_URL" "$INSTALL_DIR"
+        git_network_retry "从 GitHub 克隆仓库" clone "$REPO_URL" "$INSTALL_DIR" \
+            || die "仓库克隆失败；请检查服务器到 GitHub 的网络连接"
     fi
     ok "当前版本：$(git -C "$INSTALL_DIR" log -1 --oneline)"
 }
