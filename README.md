@@ -8,6 +8,23 @@
 uv sync
 ```
 
+Linux 云服务器可使用仓库根目录的完整部署脚本：
+
+```bash
+git clone https://github.com/gjzxyb/ExamForge-Math.git
+cd ExamForge-Math
+bash deploy.sh --llm-key 'sk-YOUR_DEEPSEEK_KEY'
+```
+
+非交互部署示例：
+
+```bash
+NON_INTERACTIVE=1 SERVICE_PORT=8001 \
+  LLM_API_KEY='sk-YOUR_DEEPSEEK_KEY' LLM_BACKEND=http bash deploy.sh
+```
+
+脚本会安装依赖、更新代码、初始化/迁移数据库、执行测试、注册 systemd 服务并运行健康检查；重复执行可用于安全更新部署。已有 `.env` 与持久化 `data/settings.json` 不会被覆盖。
+
 ## CLI 一览
 
 ```bash
