@@ -22,4 +22,6 @@ class Problem(SQLModel, table=True):
     source: str = ""
     content_fingerprint: str = Field(index=True, unique=True)  # SHA-256 前 16 hex
     image_ref: Optional[str] = None  # 图像入口预留,第一版为 None
+    answer_generation_backend: str = ""  # http / mock / mock_fallback
+    answer_generation_error: str = ""  # 真实 API 失败原因，便于云端排查
     created_at: datetime = Field(default_factory=datetime.utcnow)

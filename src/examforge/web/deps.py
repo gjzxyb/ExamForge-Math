@@ -20,12 +20,12 @@ def ensure_init(app_data_dir: Path) -> None:
 
 
 def get_session_dep():
-    """FastAPI 依赖:每次请求返回全局复用 session(在同一 session 内事务一致)。"""
+    """复用项目会话，并在请求前失效缓存以读取后台任务的最新提交。"""
     s = get_session()
+    s.expire_all()
     try:
         yield s
     finally:
-        # 共享 session,不 close;FastAPI 多请求会复用
         pass
 
 

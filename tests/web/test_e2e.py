@@ -76,6 +76,46 @@ def test_e2e_background_ingest_reports_progress_and_persists_answer(app_client):
     assert "1. 审题" in detail.text
 
 
+def test_background_ingest_persists_fallback_reason_and_cross_worker_job(app_client):
+    import time
+
+    app_client.post("/settings/llm", data={
+        "backend": "http",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key": "",
+        "model": "deepseek-chat",
+        "timeout": "180",
+    })
+    response = app_client.post("/ingest/start", data={
+        "year": 2026,
+        "region": "云端降级诊断卷",
+        "subject_area": "导数",
+        "stem": "求函数 $f(x)=x^2$ 的最小值。",
+        "answer": "",
+        "official_analysis_steps": "",
+    })
+    started = response.json()
+
+    status = None
+    for _ in range(30):
+        status = app_client.get(started["status_url"]).json()
+        if status["status"] in {"completed", "completed_with_warning", "failed"}:
+            break
+        time.sleep(0.05)
+
+    assert status["status"] == "completed_with_warning"
+    assert status["used_fallback"] is True
+    assert status["answer_backend"] == "mock_fallback_no_key"
+    assert "未取得可用的真实 LLM 配置" in status["warning"]
+
+    detail = app_client.get(f'/problems/{started["problem_id"]}')
+    assert "当前答案是 mock 占位内容" in detail.text
+    assert "mock_fallback_no_key" in detail.text
+
+    review = app_client.get("/review")
+    assert "当前仅为占位答案" in review.text
+
+
 def test_e2e_qa_returns_answer(app_client):
     r = app_client.post("/qa", data={
         "question": "含参不等式恒成立问题怎么做?",

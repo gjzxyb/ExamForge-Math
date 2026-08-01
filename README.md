@@ -59,6 +59,11 @@ uv run examforge serve --host 0.0.0.0 --port 8000
 保存后立即生效(下次 LLM/Embedder/OCR 调用即读到新值),
 并持久化到 `data/settings.json`。环境变量仍可作为启动初始值。
 
+云服务器可启动多个 Uvicorn/Gunicorn worker；LLM 设置与录入任务状态已通过
+`data/settings.json` 和 SQLite 在进程间同步。部署时必须让所有 worker 使用同一个
+持久化 `--data-dir`，且该目录需要可写；不要把 `data` 放在容器临时层，否则重启后
+API 配置和题库会丢失。
+
 **智能录入**:公式识别支持 `mock` 本地演示,以及 `tencent`/`aliyun` 兼容代理模式。腾讯云数学试题识别、阿里云印刷体公式识别通常需要厂商签名,推荐在 `OCR Endpoint` 后接云函数/代理完成签名,本应用负责上传图片并解析返回的 LaTeX 文本。几何题建议保留原图截图,系统会把图片路径保存到 `Problem.image_ref`,形成“图片 + 文字”的混合题目卡片。
 
 ## 测试

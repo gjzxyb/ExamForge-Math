@@ -1,8 +1,6 @@
 """题目录入路由:GET 表单 + 后台端到端管线。"""
 
-from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from threading import Lock
 from fastapi import APIRouter, Request, Form, Depends, UploadFile, File, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlmodel import Session
@@ -11,37 +9,24 @@ from uuid import uuid4
 
 from ..deps import get_session_dep, problem_repo_dep, llm_dep, embedder_dep, config_dep
 from ..app import templates
-from ...models import Problem, SubjectArea
+from ...models import IngestJobRecord, Problem, SubjectArea
 from ...pipeline import ingest_problem, run_pipeline
 
 
 router = APIRouter()
 
 
-@dataclass
-class IngestJob:
-    id: str
-    problem_id: int
-    status: str = "queued"
-    stage: str = "题目已保存，等待后台管线"
-    error: str = ""
-    queued_count: int = 0
-    llm_backend: str = ""
-    created_at: str = ""
-    finished_at: str = ""
-
-
-_ingest_jobs: dict[str, IngestJob] = {}
-_ingest_jobs_lock = Lock()
-
-
 def _update_ingest_job(job_id: str, **values) -> None:
-    with _ingest_jobs_lock:
-        job = _ingest_jobs.get(job_id)
+    from ...repositories import get_engine
+
+    with Session(get_engine()) as session:
+        job = session.get(IngestJobRecord, job_id)
         if job is None:
             return
         for key, value in values.items():
             setattr(job, key, value)
+        session.add(job)
+        session.commit()
 
 
 def _run_ingest_job(job_id: str, problem_id: int) -> None:
@@ -63,7 +48,7 @@ def _run_ingest_job(job_id: str, problem_id: int) -> None:
         reference = (problem.reference_solution or "").strip()
         if not answer or not analysis:
             _update_ingest_job(job_id, status="running", stage="正在调用 API 生成详细答案")
-            generated, warning, _ = _generate_missing_answer_fail_open(
+            generated, warning, _, answer_backend = _generate_missing_answer_fail_open(
                 llm,
                 stem_latex=problem.stem_latex,
                 subject_area=problem.subject_area.value,
@@ -76,11 +61,21 @@ def _run_ingest_job(job_id: str, problem_id: int) -> None:
             problem.answer = answer or None
             problem.official_analysis_steps = analysis or None
             problem.reference_solution = analysis or reference or answer or None
+            problem.answer_generation_backend = answer_backend
+            problem.answer_generation_error = warning
             session.add(problem)
             session.commit()
             session.refresh(problem)
             if warning:
-                _update_ingest_job(job_id, stage="真实 API 失败，已保存兜底答案；正在提炼方法")
+                _update_ingest_job(
+                    job_id,
+                    warning=warning,
+                    answer_backend=answer_backend,
+                    used_fallback=True,
+                    stage="真实 API 生成失败，已保存占位答案；正在提炼方法",
+                )
+            else:
+                _update_ingest_job(job_id, answer_backend=answer_backend)
 
         _update_ingest_job(job_id, status="running", stage="答案已保存，正在提炼并分类解题方法")
         result = run_pipeline(
@@ -91,12 +86,17 @@ def _run_ingest_job(job_id: str, problem_id: int) -> None:
             config=get_config(),
             force_review=True,
         )
+        fallback = bool((problem.answer_generation_backend or "").startswith("mock_fallback"))
         _update_ingest_job(
             job_id,
-            status="completed",
-            stage="管线完成，答案与解析已进入审核队列",
+            status="completed_with_warning" if fallback else "completed",
+            stage=(
+                "管线完成，但真实 API 生成失败；审核队列中当前为占位答案"
+                if fallback else "管线完成，真实答案与解析已进入审核队列"
+            ),
             queued_count=len(result.suspicions),
             llm_backend=result.llm_backend_used,
+            used_fallback=fallback,
             finished_at=datetime.now(timezone.utc).isoformat(),
         )
     except Exception as exc:
@@ -179,6 +179,9 @@ def _generate_missing_answer_fail_open(
     web_context, search_notice = _get_answer_web_context(
         stem_latex=stem_latex, subject_area=subject_area,
     )
+    effective_backend = str(
+        getattr(llm, "effective_backend", llm.__class__.__name__)
+    ).lower()
     try:
         generated = llm.generate_answer(
             stem_latex=stem_latex,
@@ -186,7 +189,13 @@ def _generate_missing_answer_fail_open(
             reference_solution=reference_solution,
             web_context=web_context or None,
         )
-        return generated, "", search_notice
+        if effective_backend.startswith("mock_fallback"):
+            warning = (
+                "当前进程未取得可用的真实 LLM 配置，实际后端为 "
+                f"{effective_backend}；请确认 API Key 已保存到当前 data/settings.json。"
+            )
+            return generated, warning, search_notice, effective_backend
+        return generated, "", search_notice, effective_backend
     except Exception as exc:
         warning = _friendly_llm_error(exc)
         mock = MockLLM()
@@ -197,7 +206,7 @@ def _generate_missing_answer_fail_open(
             reference_solution=reference_solution,
             web_context=web_context or None,
         )
-        return generated, warning, search_notice
+        return generated, warning, search_notice, "mock_fallback"
 
 
 async def _save_figure_upload(request: Request, figure: UploadFile | None) -> str | None:
@@ -297,13 +306,16 @@ async def start_background_ingest(
         repo=p_repo,
     )
     job_id = uuid4().hex
-    job = IngestJob(
+    job = IngestJobRecord(
         id=job_id,
         problem_id=problem.id,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
-    with _ingest_jobs_lock:
-        _ingest_jobs[job_id] = job
+    # 任务状态持久化到 SQLite，云端多 worker 下轮询仍能读取同一状态。
+    from ...repositories import get_engine
+    with Session(get_engine()) as job_session:
+        job_session.add(job)
+        job_session.commit()
     background_tasks.add_task(_run_ingest_job, job_id, problem.id)
     return JSONResponse(
         {
@@ -318,11 +330,13 @@ async def start_background_ingest(
 
 @router.get("/ingest/jobs/{job_id}")
 async def get_ingest_job(job_id: str):
-    with _ingest_jobs_lock:
-        job = _ingest_jobs.get(job_id)
-        payload = asdict(job) if job else None
+    from ...repositories import get_engine
+
+    with Session(get_engine()) as session:
+        job = session.get(IngestJobRecord, job_id)
+        payload = job.model_dump() if job else None
     if payload is None:
-        return JSONResponse({"ok": False, "error": "任务不存在或服务已重启"}, status_code=404)
+        return JSONResponse({"ok": False, "error": "任务不存在"}, status_code=404)
     return JSONResponse({"ok": True, **payload})
 
 
@@ -352,6 +366,7 @@ async def submit(
     generated_answer_confidence = None
     answer_generation_warning = ""
     answer_search_notice = ""
+    answer_backend = "manual"
     try:
         image_ref = await _save_figure_upload(request, figure)
         # LLM 仍读取 reference_solution;优先使用人工填写的官方解析，兼容旧 reference 字段。
@@ -370,7 +385,7 @@ async def submit(
         # 最终答案或详细解析任一缺失时都调用生成接口。此前只检查 answer，
         # 导致用户填写简答/旧 reference 后，生成的详细步骤没有被持久化。
         if not answer or not official_analysis_steps:
-            generated, answer_generation_warning, answer_search_notice = _generate_missing_answer_fail_open(
+            generated, answer_generation_warning, answer_search_notice, answer_backend = _generate_missing_answer_fail_open(
                 llm,
                 stem_latex=stem,
                 subject_area=subject_area,
@@ -399,6 +414,10 @@ async def submit(
             image_ref=image_ref,
             source=source, repo=p_repo,
         )
+        p.answer_generation_backend = answer_backend
+        p.answer_generation_error = answer_generation_warning
+        s.add(p)
+        s.commit()
         r = run_pipeline(
             p, session=s, llm=llm, embedder=embedder, config=cfg,
             force_review=True,

@@ -51,6 +51,12 @@
   </details>
   <details open class="review-answer-panel">
     <summary>答案与详细解析</summary>
+    {% if it.problem.answer_generation_backend.startswith("mock_fallback") %}
+    <div class="flag-suspicious"><b>当前仅为占位答案，不是真实 API 生成结果。</b><br>
+      <small>{{ it.problem.answer_generation_error or "请检查云服务器的 LLM 配置与外网访问能力。" }}</small><br>
+      <a href="/problems/{{ it.problem.id }}">打开例题并重新生成真实答案 →</a>
+    </div>
+    {% endif %}
     <p><b>最终答案：</b></p>
     <div class="math-content compact-analysis">{{ (it.problem.answer or "—")|math_text|safe }}</div>
     <p><b>详细解析步骤：</b></p>

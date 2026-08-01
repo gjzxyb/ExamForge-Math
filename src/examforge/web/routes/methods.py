@@ -935,7 +935,7 @@ async def generate_problem_answer(
     from .ingest import _generate_missing_answer_fail_open
 
     reference = problem.official_analysis_steps or problem.reference_solution or None
-    generated, llm_warning, search_notice = _generate_missing_answer_fail_open(
+    generated, llm_warning, search_notice, answer_backend = _generate_missing_answer_fail_open(
         llm,
         stem_latex=problem.stem_latex,
         subject_area=problem.subject_area.value,
@@ -945,6 +945,8 @@ async def generate_problem_answer(
     if generated.analysis_steps:
         problem.official_analysis_steps = generated.analysis_steps.strip()
         problem.reference_solution = generated.analysis_steps.strip()
+    problem.answer_generation_backend = answer_backend
+    problem.answer_generation_error = llm_warning
     s.add(problem)
     s.commit()
 

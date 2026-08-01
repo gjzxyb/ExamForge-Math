@@ -41,6 +41,8 @@ class ProblemRepo:
         existing.official_analysis_steps = problem.official_analysis_steps
         existing.sub_knowledge = problem.sub_knowledge
         existing.problem_type_tags = problem.problem_type_tags
+        existing.answer_generation_backend = problem.answer_generation_backend
+        existing.answer_generation_error = problem.answer_generation_error
         existing.source = problem.source
         existing.image_ref = problem.image_ref
         existing.created_at = existing.created_at or datetime.utcnow()

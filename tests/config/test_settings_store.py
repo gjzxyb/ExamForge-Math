@@ -45,6 +45,18 @@ def test_settings_persists_to_disk_and_reloads(fresh_store):
     assert s.llm.model == "m-1"
 
 
+def test_settings_store_reload_changes_written_by_another_worker(fresh_store):
+    worker_a = SettingsStore(fresh_store)
+    worker_b = SettingsStore(fresh_store)
+    worker_a.get()
+    worker_b.get()
+
+    worker_a.update(llm={"backend": "http", "api_key": "shared-key"})
+
+    assert worker_b.get().llm.backend == "http"
+    assert worker_b.get().llm.api_key == "shared-key"
+
+
 def test_settings_partial_update_keeps_other_fields(fresh_store):
     store = SettingsStore(fresh_store)
     store.update(llm={"api_key": "k1", "base_url": "u1", "model": "m1", "backend": "http", "timeout": 10.0})

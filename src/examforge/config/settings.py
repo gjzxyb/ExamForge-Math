@@ -8,6 +8,7 @@ import json
 import os
 import threading
 import secrets
+from tempfile import NamedTemporaryFile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Optional
@@ -122,6 +123,14 @@ class SettingsStore:
         self._lock = threading.RLock()
         self._settings = Settings()
         self._loaded = False
+        self._disk_signature: tuple[int, int] | None = None
+
+    def _current_disk_signature(self) -> tuple[int, int] | None:
+        try:
+            stat = self.path.stat()
+        except FileNotFoundError:
+            return None
+        return stat.st_mtime_ns, stat.st_size
 
     def ensure_loaded(self) -> None:
         if self._loaded:
@@ -134,15 +143,24 @@ class SettingsStore:
             if not self._settings.auth.session_secret:
                 self._settings.auth.session_secret = secrets.token_urlsafe(48)
                 self._save_to_disk(self._settings)
+            else:
+                self._disk_signature = self._current_disk_signature()
             self._loaded = True
 
     def get(self) -> Settings:
         self.ensure_loaded()
-        return self._settings
+        with self._lock:
+            # 云端常使用多个 worker。设置页只会修改其中一个进程，因此每次
+            # 读取前检查磁盘版本，让其它 worker 也能立即使用最新 API 配置。
+            signature = self._current_disk_signature()
+            if signature is not None and signature != self._disk_signature:
+                self._settings = self._load_from_disk(self._settings)
+                self._disk_signature = signature
+            return self._settings
 
     def update(self, **kwargs) -> Settings:
         """支持 llm / model_control / embedder / web_search / ocr 五块整体替换。"""
-        self.ensure_loaded()
+        self.get()
         with self._lock:
             cur = self._settings
             if "llm" in kwargs:
@@ -174,10 +192,15 @@ class SettingsStore:
 
     def _save_to_disk(self, s: Settings) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps(s.to_dict(), ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        content = json.dumps(s.to_dict(), ensure_ascii=False, indent=2)
+        with NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=self.data_dir,
+            prefix="settings-", suffix=".tmp", delete=False,
+        ) as handle:
+            handle.write(content)
+            temporary = Path(handle.name)
+        temporary.replace(self.path)
+        self._disk_signature = self._current_disk_signature()
 
 
 # ---- 模块级单例 --------------------------------------------------------

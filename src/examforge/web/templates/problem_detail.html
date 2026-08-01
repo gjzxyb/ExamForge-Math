@@ -16,6 +16,11 @@
 
 <section class="detail-card">
   <h2>答案与官方解析</h2>
+  {% if problem.answer_generation_backend.startswith("mock_fallback") %}
+  <div class="flag-suspicious"><b>当前答案是 mock 占位内容，真实 API 调用未成功。</b><br>
+    <small>{{ problem.answer_generation_error or "请检查云服务器的 LLM 配置与外网访问能力。" }}</small>
+  </div>
+  {% endif %}
   <form method="post" action="/problems/{{ problem.id }}/generate-answer" style="margin:0.5rem 0 1rem">
     <button>生成答案</button>
     <span class="muted">调用当前 LLM/API，并可结合设置中的全网搜索 API 生成详细答案与解析草稿。</span>

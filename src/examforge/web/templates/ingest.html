@@ -390,9 +390,12 @@ function attachBackgroundIngest() {
         if (!statusResponse.ok || !job.ok) throw new Error(job.error || "读取任务状态失败");
         stage.textContent = job.stage;
         bar.style.width = job.status === "queued" ? "15%" : job.status === "running" ? "62%" : "100%";
-        if (job.status === "completed") {
+        if (job.status === "completed" || job.status === "completed_with_warning") {
           stage.textContent = job.stage + "（待审核 " + job.queued_count + " 条）";
-          panel.classList.add("completed");
+          panel.classList.add(job.used_fallback ? "warning" : "completed");
+          if (job.warning) {
+            stage.textContent += "；原因：" + job.warning;
+          }
           links.hidden = false;
           button.disabled = false;
           button.textContent = "继续录入下一题";

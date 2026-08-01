@@ -58,6 +58,7 @@ templates.env.globals["auth_enabled"] = lambda: get_settings().auth.enabled
 
 def _stats() -> dict:
     s = get_session()
+    s.expire_all()
     return {
         "problems": s.exec(select(func.count(Problem.id))).scalar() or 0,
         "methods_total": s.exec(select(func.count(Method.id))).scalar() or 0,

@@ -5,7 +5,7 @@ from sqlmodel import SQLModel, Session, create_engine
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from typing import Optional
-from ..models import Problem, Method, SolutionInstance
+from ..models import Problem, Method, SolutionInstance, IngestJobRecord
 
 
 _engine: Optional[Engine] = None
@@ -23,6 +23,8 @@ def _ensure_problem_columns(engine: Engine) -> None:
         "official_analysis_steps": "VARCHAR",
         "sub_knowledge": "VARCHAR DEFAULT ''",
         "problem_type_tags": "VARCHAR DEFAULT ''",
+        "answer_generation_backend": "VARCHAR DEFAULT ''",
+        "answer_generation_error": "VARCHAR DEFAULT ''",
     }
     with engine.begin() as conn:
         existing = {row[1] for row in conn.execute(text("PRAGMA table_info(problems)"))}
