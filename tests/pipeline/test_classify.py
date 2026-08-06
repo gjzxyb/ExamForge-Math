@@ -67,3 +67,26 @@ def test_classify_unknown_method_decision_made(ctx):
     # 三种 action 都可能,关键是 si 已挂上 method_id(无论是 candidate 还是 suspicious)
     assert res.si.method_id is not None
     assert res.action in ("candidate", "suspicious", "exact")
+
+
+def test_classify_batches_proposed_and_candidate_embeddings(ctx):
+    class BatchOnlyEmbedder(MockEmbedder):
+        def __init__(self):
+            self.batch_calls = []
+
+        def embed(self, text):
+            raise AssertionError("classify should use one batch API request")
+
+        def embed_batch(self, texts):
+            items = list(texts)
+            self.batch_calls.append(items)
+            return [self._vec(text) for text in items]
+
+    embedder = BatchOnlyEmbedder()
+    classify(
+        _problem(), _draft(name="完全未知名法"),
+        method_repo=method_repo(), embedder=embedder,
+        vector_repo=vector_repo(), config=PipelineConfig(),
+    )
+    assert len(embedder.batch_calls) == 1
+    assert len(embedder.batch_calls[0]) == 2

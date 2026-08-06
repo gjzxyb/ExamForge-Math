@@ -20,9 +20,11 @@ SERVICE_USER="${SERVICE_USER:-${SUDO_USER:-${USER:-$(id -un)}}}"
 ENV_FILE_OVERRIDE="${ENV_FILE:-}"
 ENV_FILE="${ENV_FILE_OVERRIDE:-$INSTALL_DIR/.env}"
 LLM_BACKEND="${LLM_BACKEND:-mock}"
+LLM_PROVIDER="${LLM_PROVIDER:-deepseek}"
 LLM_BASE_URL="${LLM_BASE_URL:-https://api.deepseek.com/v1}"
 LLM_API_KEY="${LLM_API_KEY:-}"
 LLM_MODEL="${LLM_MODEL:-deepseek-chat}"
+LLM_THINKING_MODE="${LLM_THINKING_MODE:-auto}"
 LLM_TIMEOUT="${LLM_TIMEOUT:-300}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 SKIP_SYSTEM_DEPS="${SKIP_SYSTEM_DEPS:-0}"
@@ -48,8 +50,10 @@ ExamForge-Math Linux 一键部署/更新脚本
   --install-dir DIR    安装目录，默认 ~/ExamForge-Math
   --data-dir DIR       持久化数据目录，默认 <安装目录>/data
   --llm-key KEY        配置 DeepSeek/OpenAI 兼容 API Key，并启用 http 后端
+  --llm-provider NAME  供应商预设（deepseek/openai/qwen/zhipu/moonshot/custom）
   --llm-base URL       LLM Base URL
   --llm-model MODEL    模型名称
+  --llm-thinking MODE  思考模式（auto/disabled/low/high/max）
   --python VERSION     Python 版本，默认 3.12
   --skip-tests         跳过部署前测试
   --skip-system-deps   跳过系统依赖安装
@@ -67,8 +71,10 @@ while [[ $# -gt 0 ]]; do
         --install-dir) INSTALL_DIR="$2"; refresh_paths; shift 2 ;;
         --data-dir) DATA_DIR_OVERRIDE="$2"; DATA_DIR="$2"; shift 2 ;;
         --llm-key) LLM_API_KEY="$2"; LLM_BACKEND="http"; shift 2 ;;
+        --llm-provider) LLM_PROVIDER="$2"; shift 2 ;;
         --llm-base) LLM_BASE_URL="$2"; shift 2 ;;
         --llm-model) LLM_MODEL="$2"; shift 2 ;;
+        --llm-thinking) LLM_THINKING_MODE="$2"; shift 2 ;;
         --python) PYTHON_VERSION="$2"; shift 2 ;;
         --skip-tests) SKIP_TESTS=1; shift ;;
         --skip-system-deps) SKIP_SYSTEM_DEPS=1; shift ;;
@@ -193,9 +199,11 @@ write_env_file() {
 
 # deploy.sh 更新的 LLM 配置（同名变量以最后一项为准）
 EXAMFORGE_LLM_BACKEND=http
+EXAMFORGE_LLM_PROVIDER=${LLM_PROVIDER}
 EXAMFORGE_LLM_BASE=${LLM_BASE_URL}
 EXAMFORGE_LLM_KEY=${LLM_API_KEY}
 EXAMFORGE_LLM_MODEL=${LLM_MODEL}
+EXAMFORGE_LLM_THINKING_MODE=${LLM_THINKING_MODE}
 EXAMFORGE_LLM_TIMEOUT=${LLM_TIMEOUT}
 EOF
             chmod 600 "$ENV_FILE"
@@ -212,9 +220,11 @@ EOF
     info "创建 $ENV_FILE"
     cat > "$ENV_FILE" <<EOF
 EXAMFORGE_LLM_BACKEND=${LLM_BACKEND}
+EXAMFORGE_LLM_PROVIDER=${LLM_PROVIDER}
 EXAMFORGE_LLM_BASE=${LLM_BASE_URL}
 EXAMFORGE_LLM_KEY=${LLM_API_KEY}
 EXAMFORGE_LLM_MODEL=${LLM_MODEL}
+EXAMFORGE_LLM_THINKING_MODE=${LLM_THINKING_MODE}
 EXAMFORGE_LLM_TIMEOUT=${LLM_TIMEOUT}
 EXAMFORGE_EMBED_BACKEND=mock
 EXAMFORGE_OCR_PROVIDER=mock
@@ -239,6 +249,8 @@ configure_runtime_llm() {
     EXAMFORGE_DEPLOY_LLM_BASE="$LLM_BASE_URL" \
     EXAMFORGE_DEPLOY_LLM_KEY="$LLM_API_KEY" \
     EXAMFORGE_DEPLOY_LLM_MODEL="$LLM_MODEL" \
+    EXAMFORGE_DEPLOY_LLM_PROVIDER="$LLM_PROVIDER" \
+    EXAMFORGE_DEPLOY_LLM_THINKING_MODE="$LLM_THINKING_MODE" \
     EXAMFORGE_DEPLOY_LLM_TIMEOUT="$LLM_TIMEOUT" \
     uv run python - <<'PY'
 import os
@@ -249,9 +261,11 @@ from examforge.config.settings import init_settings_store
 store = init_settings_store(Path(os.environ["EXAMFORGE_DEPLOY_DATA_DIR"]))
 store.update(llm={
     "backend": "http",
+    "provider": os.environ["EXAMFORGE_DEPLOY_LLM_PROVIDER"],
     "base_url": os.environ["EXAMFORGE_DEPLOY_LLM_BASE"],
     "api_key": os.environ["EXAMFORGE_DEPLOY_LLM_KEY"],
     "model": os.environ["EXAMFORGE_DEPLOY_LLM_MODEL"],
+    "thinking_mode": os.environ["EXAMFORGE_DEPLOY_LLM_THINKING_MODE"],
     "timeout": float(os.environ["EXAMFORGE_DEPLOY_LLM_TIMEOUT"]),
 })
 PY

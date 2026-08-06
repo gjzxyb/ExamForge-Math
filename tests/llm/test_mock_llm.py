@@ -18,6 +18,15 @@ def test_factory_default_returns_mock(monkeypatch):
     monkeypatch.delenv("EXAMFORGE_LLM_BACKEND", raising=False)
     assert get_llm().__class__.__name__ == "MockLLM"
 
+
+def test_http_factory_reuses_client_for_same_configuration():
+    from examforge.llm.factory import _cached_http_llm
+
+    _cached_http_llm.cache_clear()
+    first = _cached_http_llm("https://llm.test/v1", "k", "m", 180.0, "custom", "auto")
+    second = _cached_http_llm("https://llm.test/v1", "k", "m", 180.0, "custom", "auto")
+    assert first is second
+
 def test_mock_generate_answer_returns_generated_answer():
     llm = MockLLM()
     out = llm.generate_answer(

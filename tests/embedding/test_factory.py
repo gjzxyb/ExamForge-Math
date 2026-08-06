@@ -16,3 +16,12 @@ def test_unknown_backend_raises():
     import pytest
     with pytest.raises(ValueError):
         get_embedder("does-not-exist")
+
+
+def test_http_factory_reuses_client_for_same_configuration():
+    from examforge.embedding.factory import _cached_http_embedder
+
+    _cached_http_embedder.cache_clear()
+    first = _cached_http_embedder("https://embed.test", "k", "m", 8, 30.0)
+    second = _cached_http_embedder("https://embed.test", "k", "m", 8, 30.0)
+    assert first is second

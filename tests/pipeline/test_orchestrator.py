@@ -66,7 +66,11 @@ def test_pipeline_http_llm_timeout_falls_back_to_mock(ctx):
     class TimeoutLLM:
         effective_backend = "http"
 
+        def __init__(self):
+            self.calls = 0
+
         def extract_solution(self, **kwargs):
+            self.calls += 1
             raise LLMHttpError("无法连接 LLM: The read operation timed out")
 
     p = problem_repo().upsert_by_fingerprint(Problem(
@@ -77,26 +81,28 @@ def test_pipeline_http_llm_timeout_falls_back_to_mock(ctx):
         reference_solution="a=2",
         content_fingerprint=make_fingerprint("timeout-fallback", 2026, "超时测试卷"),
     ))
+    llm = TimeoutLLM()
     r = run_pipeline(
         p,
         session=get_session(),
-        llm=TimeoutLLM(),
+        llm=llm,
         embedder=MockEmbedder(),
         config=PipelineConfig(),
     )
     assert r.llm_backend_used == "mock_fallback"
     assert "timed out" in r.llm_error
     assert "240-300" in r.llm_error
+    assert llm.calls == 1
     assert len(r.confirmed) + len(r.suspicions) >= 1
 
 
 
-def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
+def test_pipeline_http_llm_does_not_duplicate_formal_extract(ctx):
     from examforge.repositories import get_session
     from examforge.llm.http_llm import LLMHttpError
     from examforge.llm.schemas import ExtractedSolution, ProposedMethodUse
 
-    class FlakyProbeLLM:
+    class CountingLLM:
         effective_backend = "http"
 
         def __init__(self):
@@ -104,8 +110,6 @@ def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
 
         def extract_solution(self, **kwargs):
             self.calls += 1
-            if self.calls < 3:
-                raise LLMHttpError(f"probe failed {self.calls}")
             return ExtractedSolution(
                 summary="思路",
                 methods=[ProposedMethodUse(
@@ -119,7 +123,7 @@ def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
                 overall_confidence=0.9,
             )
 
-    llm = FlakyProbeLLM()
+    llm = CountingLLM()
     p = problem_repo().upsert_by_fingerprint(Problem(
         year=2026,
         region="试探重试卷",
@@ -135,7 +139,7 @@ def test_pipeline_http_llm_probe_retries_three_times_until_success(ctx):
         embedder=MockEmbedder(),
         config=PipelineConfig(),
     )
-    assert llm.calls == 4  # 前两次试探失败,第 3 次试探成功,第 4 次正式 Extract
+    assert llm.calls == 1
     assert r.llm_backend_used == "http"
     assert r.llm_error == ""
     assert len(r.confirmed) + len(r.suspicions) >= 1

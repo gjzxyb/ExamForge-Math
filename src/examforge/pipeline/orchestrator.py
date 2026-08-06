@@ -79,37 +79,6 @@ def run_pipeline(
             msg += "；建议在设置中增大 LLM Timeout，或检查 Base URL/网络连通性。"
         return msg
 
-    # LLM 调用保护：真实 http 后端先做最多 3 次轻量试探调用；
-    # 第 1 次不成功则继续试探，直到成功或累计 3 次失败。全部失败后降级 mock。
-    # 即便试探成功，正式 Extract 仍保留 fail-open 兜底，避免第二阶段偶发超时冒泡到前端。
-    if fail_open and result.llm_backend_used.startswith("http"):
-        probe_error = ""
-        probe_ok = False
-        for attempt in range(1, 4):
-            try:
-                llm.extract_solution(
-                    stem_latex="1+1",
-                    reference_solution="2",
-                    taxonomy_hint=[],
-                    subject_area="其他",
-                )
-                probe_ok = True
-                break
-            except Exception as exc:
-                probe_error = _friendly_llm_error(exc)
-                warnings.warn(
-                    f"LLM 试探调用第 {attempt}/3 次失败: {probe_error}",
-                    stacklevel=2,
-                )
-        if not probe_ok:
-            result.llm_error = probe_error
-            warnings.warn(
-                f"LLM 试探调用连续 3 次失败,降级为 mock: {result.llm_error}",
-                stacklevel=2,
-            )
-            llm = _make_mock_llm()
-            result.llm_backend_used = "mock_fallback"
-
     try:
         drafts = extract(problem, llm=llm, taxonomy_provider=provider,
                          solution_add=add_si)

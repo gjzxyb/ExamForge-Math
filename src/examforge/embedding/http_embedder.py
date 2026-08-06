@@ -6,12 +6,19 @@
 import os
 from typing import Iterable
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 DEFAULT_BASE = os.environ.get("EXAMFORGE_EMBED_BASE", "https://api.example.com")
 DEFAULT_KEY = os.environ.get("EXAMFORGE_EMBED_KEY", "")
 DEFAULT_MODEL = os.environ.get("EXAMFORGE_EMBED_MODEL", "text-embedding-3-small")
 DEFAULT_DIM = int(os.environ.get("EXAMFORGE_EMBED_DIM", "1024"))
+
+
+def _is_retryable_embed_error(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        return status == 429 or status >= 500
+    return isinstance(exc, httpx.RequestError)
 
 
 class HttpEmbedder:
@@ -27,7 +34,12 @@ class HttpEmbedder:
     def dim(self) -> int:
         return self._dim
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+    @retry(
+        retry=retry_if_exception(_is_retryable_embed_error),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        reraise=True,
+    )
     def _call(self, inputs: list[str]) -> list[list[float]]:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         resp = self._client.post(

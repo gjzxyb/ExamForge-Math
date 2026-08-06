@@ -66,7 +66,6 @@ def classify(
         )
 
     # 步骤 B:嵌入相似度兜底
-    vec = embedder.embed(f"{proposed_name} {item.key_steps or ''}")
     candidates = (
         method_repo.list_confirmed_by_area(proposed_area)
         + method_repo.list_by_area(proposed_area, MethodStatus.SEED)
@@ -85,10 +84,15 @@ def classify(
             similarity=None, is_new_method=True, proposed_name=proposed_name,
         )
 
+    texts = [
+        f"{proposed_name} {item.key_steps or ''}",
+        *(f"{cm.name} {cm.applicability}" for cm in candidates),
+    ]
+    vectors = embedder.embed_batch(texts)
+    vec, ref_vectors = vectors[0], vectors[1:]
     best_id = None
     best_score = -1.0
-    for cm in candidates:
-        ref_vec = embedder.embed(f"{cm.name} {cm.applicability}")
+    for cm, ref_vec in zip(candidates, ref_vectors):
         score = _cosine(vec, ref_vec)
         if score > best_score:
             best_score = score

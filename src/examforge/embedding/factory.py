@@ -6,9 +6,20 @@
 
 import os
 import warnings
+from functools import lru_cache
 from .types import Embedder
 from .mock_embedder import MockEmbedder
 from .http_embedder import HttpEmbedder
+
+
+@lru_cache(maxsize=8)
+def _cached_http_embedder(base_url: str, api_key: str, model: str,
+                          dim: int, timeout: float) -> HttpEmbedder:
+    """Reuse the HTTP client's keep-alive pool for identical configurations."""
+    return HttpEmbedder(
+        base_url=base_url, api_key=api_key, model=model,
+        dim=dim, timeout=timeout,
+    )
 
 
 def _fallback_embedder() -> Embedder:
@@ -22,7 +33,13 @@ def _fallback_embedder() -> Embedder:
                 stacklevel=2,
             )
             return MockEmbedder()
-        return HttpEmbedder()
+        return _cached_http_embedder(
+            os.environ.get("EXAMFORGE_EMBED_BASE", "https://api.example.com"),
+            os.environ.get("EXAMFORGE_EMBED_KEY", ""),
+            os.environ.get("EXAMFORGE_EMBED_MODEL", "text-embedding-3-small"),
+            int(os.environ.get("EXAMFORGE_EMBED_DIM", "1024")),
+            float(os.environ.get("EXAMFORGE_EMBED_TIMEOUT", "30")),
+        )
     raise ValueError(f"未知 embedding backend: {backend}")
 
 
@@ -52,8 +69,7 @@ def get_embedder(backend: str | None = None) -> Embedder:
                 stacklevel=2,
             )
             return MockEmbedder()
-        return HttpEmbedder(
-            base_url=s.base_url, api_key=s.api_key,
-            model=s.model, dim=s.dim, timeout=s.timeout,
+        return _cached_http_embedder(
+            s.base_url, s.api_key, s.model, int(s.dim), float(s.timeout),
         )
     raise ValueError(f"未知 Embedder backend: {s.backend!r}")

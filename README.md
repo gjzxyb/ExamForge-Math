@@ -72,7 +72,7 @@ uv run examforge serve --host 0.0.0.0 --port 8000
 
 **访问方式**:`serve` 默认可被局域网访问。Windows 下可用 `ipconfig` 查看本机 IPv4 地址,然后在其它设备访问 `http://<本机IP>:8000`。本机仍可访问 `http://127.0.0.1:8000`。如果局域网仍无法访问,请检查 Windows 防火墙是否放行 Python/8000 端口。
 
-**运行时配置**:打开 `http://<本机IP>:8000/settings` 或 `http://127.0.0.1:8000/settings` 填入 DeepSeek key、Embedder、OCR 等,
+**运行时配置**:打开 `http://<本机IP>:8000/settings` 或 `http://127.0.0.1:8000/settings` 选择 DeepSeek、OpenAI、通义千问、智谱、Moonshot/Kimi 或自定义 OpenAI 兼容供应商，填入 API Key，并选择 Model 与思考模式；也可配置 Embedder、OCR 等，
 保存后立即生效(下次 LLM/Embedder/OCR 调用即读到新值),
 并持久化到 `data/settings.json`。环境变量仍可作为启动初始值。
 
@@ -95,7 +95,8 @@ uv run python tests/acceptance/run_eval.py   # 黄金集评估
 
 - `EXAMFORGE_LLM_BACKEND` ∈ {`mock`, `http`}  默认 `mock`
 - `EXAMFORGE_EMBED_BACKEND` ∈ {`mock`, `http`}  默认 `mock`
-- `EXAMFORGE_LLM_BASE` / `EXAMFORGE_LLM_KEY` / `EXAMFORGE_LLM_MODEL` (默认 DeepSeek)
+- `EXAMFORGE_LLM_PROVIDER` / `EXAMFORGE_LLM_BASE` / `EXAMFORGE_LLM_KEY` / `EXAMFORGE_LLM_MODEL` (默认 DeepSeek)
+- `EXAMFORGE_LLM_THINKING_MODE` ∈ {`auto`, `disabled`, `low`, `high`, `max`}
 - `EXAMFORGE_EMBED_BASE` / `EXAMFORGE_EMBED_KEY` / `EXAMFORGE_EMBED_MODEL`
 - `EXAMFORGE_OCR_PROVIDER` ∈ {`none`, `mock`, `tencent`, `aliyun`}
 - `EXAMFORGE_OCR_KEY_ID` / `EXAMFORGE_OCR_KEY_SECRET` / `EXAMFORGE_OCR_REGION` / `EXAMFORGE_OCR_ENDPOINT`

@@ -17,9 +17,14 @@ from typing import Optional
 @dataclass
 class LLMSettings:
     backend: str = "mock"          # mock | http
+    # OpenAI-compatible provider preset. ``custom`` keeps the endpoint fully user-defined.
+    provider: str = "deepseek"
     base_url: str = "https://api.deepseek.com/v1"
     api_key: str = ""
     model: str = "deepseek-chat"
+    # auto lets the provider choose; disabled turns reasoning off; the other values
+    # enable reasoning and request the corresponding effort where supported.
+    thinking_mode: str = "auto"     # auto | disabled | low | high | max
     timeout: float = 180.0
 
 
@@ -239,9 +244,11 @@ def _from_env(s: Settings) -> Settings:
         setattr(target, attr, v.strip().lower() in {"1", "true", "yes", "on"})
 
     _set("EXAMFORGE_LLM_BACKEND", s.llm, "backend")
+    _set("EXAMFORGE_LLM_PROVIDER", s.llm, "provider")
     _set("EXAMFORGE_LLM_BASE", s.llm, "base_url")
     _set("EXAMFORGE_LLM_KEY", s.llm, "api_key")
     _set("EXAMFORGE_LLM_MODEL", s.llm, "model")
+    _set("EXAMFORGE_LLM_THINKING_MODE", s.llm, "thinking_mode")
     raw_llm_timeout = os.environ.get("EXAMFORGE_LLM_TIMEOUT")
     if raw_llm_timeout:
         try:

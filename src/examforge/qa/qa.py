@@ -3,7 +3,6 @@
 绝对不写库。检索 → 拼装方法知识 → LLM 回答。
 """
 
-import math
 from sqlmodel import Session
 from sqlalchemy import select
 
@@ -48,13 +47,6 @@ def _method_doc(method: Method, examples: list[dict]) -> str:
         f"坑:{method.pitfalls}\n"
         f"例题:\n{ex_text}"
     )
-
-
-def _cosine(a, b):
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a)) or 1.0
-    nb = math.sqrt(sum(x * x for x in b)) or 1.0
-    return dot / (na * nb)
 
 
 def _example_rows(session: Session, method_id: int) -> list[dict]:
@@ -165,20 +157,26 @@ def answer(
             question=question, method_doc="(无相关方法库匹配)", examples=[],
         )
 
-    # 取 confirmed 方法列表,按与问题的相似度排序
-    stmt = select(Method).where(Method.status == MethodStatus.CONFIRMED)
-    methods = list(session.execute(stmt).scalars().all())
-    if not methods:
-        return llm.answer_question(
-            question=question, method_doc="(无 confirmed 方法)", examples=[],
+    # VectorRepo 的命中 ID 就是 confirmed SolutionInstance.embedding_id。
+    # 直接复用检索结果，避免再次逐个调用 Embedding API 给所有方法排序。
+    hit_order = {embedding_id: index for index, (embedding_id, _) in enumerate(hits)}
+    matched_solutions = list(session.execute(
+        select(SolutionInstance).where(
+            SolutionInstance.embedding_id.in_(hit_order),
+            SolutionInstance.review_status == ReviewStatus.CONFIRMED,
         )
-
-    ranked = sorted(
-        methods,
-        key=lambda m: _cosine(embedder.embed(f"{m.name} {m.applicability}"), q_vec),
-        reverse=True,
-    )[:top_k]
-    top_method = ranked[0]
+    ).scalars().all())
+    matched_solutions.sort(key=lambda si: hit_order.get(si.embedding_id, len(hit_order)))
+    top_method = None
+    for si in matched_solutions:
+        method = session.get(Method, si.method_id)
+        if method is not None and method.status == MethodStatus.CONFIRMED:
+            top_method = method
+            break
+    if top_method is None:
+        return llm.answer_question(
+            question=question, method_doc="(向量命中已失效或无 confirmed 方法)", examples=[],
+        )
     examples = _example_rows(session, top_method.id)
     method_doc = _method_doc(top_method, examples)
     return llm.answer_question(

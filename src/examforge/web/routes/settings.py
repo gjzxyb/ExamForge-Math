@@ -40,9 +40,11 @@ async def view(request: Request, saved: Optional[str] = None, tested: Optional[s
 @router.post("/settings/llm")
 async def save_llm(
     backend: str = Form("mock"),
+    provider: str = Form("deepseek"),
     base_url: str = Form(""),
     api_key: str = Form(""),
     model: str = Form(""),
+    thinking_mode: str = Form("auto"),
     timeout: float = Form(180.0),
 ):
     from ...llm.http_llm import effective_llm_timeout
@@ -50,9 +52,11 @@ async def save_llm(
     effective_timeout = effective_llm_timeout(timeout) if backend == "http" else timeout
     get_settings_store().update(llm={
         "backend": backend,
+        "provider": provider,
         "base_url": base_url,
         "api_key": api_key,
         "model": model,
+        "thinking_mode": thinking_mode,
         "timeout": effective_timeout,
     })
     return JSONResponse({"ok": True, "redirect": "/settings?saved=llm"})
@@ -141,18 +145,10 @@ async def save_ocr(
 
 @router.post("/settings/test-llm")
 async def test_llm():
-    """对当前 LLM 配置做接近录入链路的探测。
-
-    旧实现只用 1+1 极小 prompt 测 extract_solution,容易出现“设置页 OK,
-    正式录入长 prompt 超时”的假阳性。这里同时测试:
-    - 实际执行后端是否真为 http,避免配置 http 但缺 key 时 mock 兜底还显示 OK;
-    - 代表性压轴题 extract_solution;
-    - 缺失答案场景 generate_answer。
-    """
+    """快速验证端点、鉴权、模型名称和 JSON Output 协议。"""
     import time
     from ...llm import get_llm
-    from ...llm.schemas import ExtractedSolution, GeneratedAnswer
-    from ...llm.http_llm import LLMHttpError
+    from ...llm.http_llm import CONNECTION_PROBE_TIMEOUT, LLMHttpError
 
     configured_backend = get_settings().llm.backend
     started = time.perf_counter()
@@ -167,33 +163,18 @@ async def test_llm():
                 "error": "LLM 配置为 http,但实际已降级为 mock。请检查 API Key、Base URL 和模型名称后再测试。",
             }, status_code=200)
 
-        probe_stem = (
-            "设函数 $f(x)=x^3-3x$, 若对任意实数 $x$, "
-            "$f(x)\\ge -a$ 恒成立, 求 $a$ 的最大值。"
-        )
-        out = llm.extract_solution(
-            stem_latex=probe_stem,
-            reference_solution="先求 $f(x)$ 的最小值为 -2, 因而 $a=2$。",
-            taxonomy_hint=["分离参数法", "切线放缩"],
-            subject_area="导数",
-        )
-        ExtractedSolution.model_validate(out.model_dump())
-        generated = llm.generate_answer(
-            stem_latex=probe_stem,
-            subject_area="导数",
-            reference_solution=None,
-        )
-        GeneratedAnswer.model_validate(generated.model_dump())
+        probe_ok = True
+        if str(effective_backend).startswith("http"):
+            probe_ok = llm.probe_connection() == {"ok": True}
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         return JSONResponse({
-            "ok": True,
+            "ok": probe_ok,
             "backend": effective_backend,
             "configured_backend": configured_backend,
-            "method_count": len(out.methods),
-            "answer_ok": bool(generated.answer),
+            "probe_ok": probe_ok,
+            "probe_mode": "quick",
+            "probe_timeout": CONNECTION_PROBE_TIMEOUT,
             "elapsed_ms": elapsed_ms,
-            "timeout": getattr(llm, "timeout", None),
-            "configured_timeout": getattr(llm, "configured_timeout", None),
         })
     except LLMHttpError as e:
         return JSONResponse({

@@ -20,6 +20,8 @@ HTTP_LLM_CONNECT_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_CONNECT_TIMEOUT",
 HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30"))
 MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "8192"))
 ANSWER_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_ANSWER_TOKENS", "8192"))
+THINKING_MODES = {"auto", "disabled", "low", "high", "max"}
+CONNECTION_PROBE_TIMEOUT = 20.0
 
 
 def effective_llm_timeout(timeout: float | int | str | None) -> float:
@@ -129,10 +131,13 @@ class LLMHttpError(RuntimeError):
 class HttpLLM:
     def __init__(self, base_url: str = DEFAULT_BASE, api_key: str = DEFAULT_KEY,
                  model: str = DEFAULT_MODEL, timeout: float = 60.0,
-                 max_retries: int = 2) -> None:
+                 max_retries: int = 2, provider: str = "deepseek",
+                 thinking_mode: str = "auto") -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.provider = (provider or "custom").strip().lower()
+        self.thinking_mode = thinking_mode if thinking_mode in THINKING_MODES else "auto"
         try:
             self._configured_timeout = float(timeout)
         except (TypeError, ValueError):
@@ -154,6 +159,40 @@ class HttpLLM:
     def configured_timeout(self) -> float:
         return self._configured_timeout
 
+    def _thinking_parameters(self, mode_override: str | None = None) -> dict[str, Any]:
+        """Map the common UI choice to each provider's compatible API fields."""
+        mode = mode_override if mode_override in THINKING_MODES else self.thinking_mode
+        if mode == "auto":
+            return {}
+        if self.provider in {"deepseek", "zhipu", "moonshot", "kimi"}:
+            params: dict[str, Any] = {"thinking": {"type": "disabled" if mode == "disabled" else "enabled"}}
+            if mode != "disabled":
+                params["reasoning_effort"] = mode
+            return params
+        if self.provider in {"qwen", "aliyun", "dashscope"}:
+            return {"enable_thinking": mode != "disabled"}
+        if self.provider == "openai":
+            # OpenAI reasoning models use "none" to disable reasoning. ``max``
+            # is reduced to ``high`` because it is not accepted by all models.
+            return {"reasoning_effort": "none" if mode == "disabled" else ("high" if mode == "max" else mode)}
+        return {}
+
+    @staticmethod
+    def _decode_response(resp: httpx.Response, request_url: str) -> dict[str, Any]:
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMHttpError(
+                "LLM 返回了非 JSON 响应（通常是 Base URL/代理地址错误）",
+                status_code=resp.status_code,
+                body=resp.text,
+                request_url=request_url,
+            ) from exc
+        if not isinstance(data, dict):
+            raise LLMHttpError("LLM 响应 JSON 不是对象", status_code=resp.status_code,
+                               body=resp.text, request_url=request_url)
+        return data
+
     def _chat_json(
         self,
         *,
@@ -162,10 +201,18 @@ class HttpLLM:
         schema_model: type,
         max_tokens: int | None = None,
         retry_user_suffix: str = "",
+        thinking_mode_override: str | None = None,
+        max_retries_override: int | None = None,
+        request_timeout: float | None = None,
     ) -> Any:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        # DeepSeek JSON Output requires the prompt to contain the literal word
+        # ``json``. Keep this invariant even when a custom prompt is supplied.
+        if "json" not in system.lower() and "json" not in user.lower():
+            system = system.rstrip() + "\nReturn the result as valid json only."
         last_err: Exception | None = None
-        for attempt in range(self._max_retries + 1):
+        retry_limit = self._max_retries if max_retries_override is None else max_retries_override
+        for attempt in range(retry_limit + 1):
             try:
                 request_max_tokens = None
                 if max_tokens:
@@ -187,8 +234,10 @@ class HttpLLM:
                         ],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.2,
+                        **self._thinking_parameters(thinking_mode_override),
                         **({"max_tokens": request_max_tokens} if request_max_tokens else {}),
                     },
+                    **({"timeout": request_timeout} if request_timeout is not None else {}),
                 )
                 # 4xx/5xx 不抛,手工 raise 以便带 status
                 if resp.status_code >= 400:
@@ -198,7 +247,8 @@ class HttpLLM:
                         body=resp.text,
                         request_url=str(resp.request.url),
                     )
-                choice = resp.json()["choices"][0]
+                payload = self._decode_response(resp, str(resp.request.url))
+                choice = payload["choices"][0]
                 content = choice["message"]["content"]
                 try:
                     return _validate_llm_json(content, schema_model)
@@ -210,7 +260,7 @@ class HttpLLM:
                         ),
                         request_url=str(resp.request.url),
                     )
-                    if attempt < self._max_retries:
+                    if attempt < retry_limit:
                         import time
                         time.sleep(2 ** attempt)
                         continue
@@ -225,7 +275,8 @@ class HttpLLM:
                 # 连接错也带上 URL。Timeout 单独说明,否则 str(ReadTimeout) 为空时前端只剩 URL。
                 if isinstance(e, httpx.RequestError) and e.request:
                     if isinstance(e, httpx.TimeoutException):
-                        detail = str(e) or f"请求超过 {self._timeout} 秒未返回"
+                        actual_timeout = request_timeout or self._timeout
+                        detail = str(e) or f"请求超过 {actual_timeout} 秒未返回"
                         message = f"LLM 请求超时: {detail}"
                     else:
                         detail = str(e) or e.__class__.__name__
@@ -233,9 +284,9 @@ class HttpLLM:
                     last_err = LLMHttpError(
                         message,
                         request_url=str(e.request.url),
-                        timeout_seconds=self._timeout,
+                        timeout_seconds=request_timeout or self._timeout,
                     )
-                if attempt < self._max_retries:
+                if attempt < retry_limit:
                     import time
                     time.sleep(2 ** attempt)
                     continue
@@ -243,6 +294,18 @@ class HttpLLM:
         if isinstance(last_err, LLMHttpError):
             raise last_err
         raise LLMHttpError(f"LLM 调用失败: {last_err}")
+
+    def probe_connection(self) -> dict[str, bool]:
+        """Run one bounded request to verify endpoint, auth, model and JSON mode."""
+        return self._chat_json(
+            system="Return valid json only.",
+            user='Return exactly this JSON object: {"ok": true}',
+            schema_model=dict[str, bool],
+            max_tokens=64,
+            thinking_mode_override="disabled",
+            max_retries_override=0,
+            request_timeout=CONNECTION_PROBE_TIMEOUT,
+        )
 
     def extract_solution(self, *, stem_latex, reference_solution,
                          taxonomy_hint, subject_area):

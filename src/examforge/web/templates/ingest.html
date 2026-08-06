@@ -193,12 +193,22 @@ function scheduleStemMathPreview() {
   stemPreviewTimer = window.setTimeout(renderStemMathPreview, 120);
 }
 
+async function readJsonResponse(response) {
+  const raw = await response.text();
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch (_) {
+    const preview = raw.replace(/\s+/g, " ").slice(0, 180);
+    throw new Error("服务器返回了非 JSON（HTTP " + response.status + "）：" + preview);
+  }
+}
+
 async function recognizeImageFile(file, provider) {
   const fd = new FormData();
   fd.append("provider", provider);
   fd.append("figure", file, file.name || ("pasted-" + Date.now() + ".png"));
   const res = await fetch("/ingest/ocr", { method: "POST", body: fd });
-  return await res.json();
+  return await readJsonResponse(res);
 }
 
 function requireOcrProvider(resultEl) {
@@ -378,15 +388,16 @@ function attachBackgroundIngest() {
         method: "POST",
         body: new FormData(form),
       });
-      const startedJob = await response.json();
+      const startedJob = await readJsonResponse(response);
       if (!response.ok || !startedJob.ok) throw new Error(startedJob.error || "创建任务失败");
       problemLink.href = "/problems/" + startedJob.problem_id;
       button.textContent = "后台处理中…";
 
+      let pollDelay = 1500;
       while (true) {
-        await new Promise(resolve => window.setTimeout(resolve, 1500));
+        await new Promise(resolve => window.setTimeout(resolve, pollDelay));
         const statusResponse = await fetch(startedJob.status_url, { cache: "no-store" });
-        const job = await statusResponse.json();
+        const job = await readJsonResponse(statusResponse);
         if (!statusResponse.ok || !job.ok) throw new Error(job.error || "读取任务状态失败");
         stage.textContent = job.stage;
         bar.style.width = job.status === "queued" ? "15%" : job.status === "running" ? "62%" : "100%";
@@ -402,6 +413,7 @@ function attachBackgroundIngest() {
           break;
         }
         if (job.status === "failed") throw new Error(job.error || "后台管线失败");
+        pollDelay = Math.min(5000, Math.round(pollDelay * 1.5));
       }
     } catch (error) {
       panel.classList.add("failed");

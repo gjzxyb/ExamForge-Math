@@ -256,6 +256,86 @@ def test_http_llm_uses_minimum_timeout_for_long_real_calls():
     assert llm.timeout >= 180
 
 
+def test_http_llm_maps_thinking_mode_for_providers():
+    from examforge.llm.http_llm import HttpLLM
+
+    assert HttpLLM(provider="deepseek", thinking_mode="high")._thinking_parameters() == {
+        "thinking": {"type": "enabled"}, "reasoning_effort": "high",
+    }
+    assert HttpLLM(provider="deepseek", thinking_mode="disabled")._thinking_parameters() == {
+        "thinking": {"type": "disabled"},
+    }
+    assert HttpLLM(provider="qwen", thinking_mode="low")._thinking_parameters() == {
+        "enable_thinking": True,
+    }
+    assert HttpLLM(provider="openai", thinking_mode="disabled")._thinking_parameters() == {
+        "reasoning_effort": "none",
+    }
+
+
+def test_http_llm_connection_probe_is_single_small_non_thinking_request():
+    from examforge.llm.http_llm import HttpLLM
+
+    requests = []
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        request = FakeRequest()
+        text = '{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}'
+
+        def json(self):
+            return {"choices": [{"message": {"content": '{"ok":true}'}}]}
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            requests.append(kwargs)
+            return FakeResponse()
+
+    llm = HttpLLM(
+        base_url="https://llm.test/v1", api_key="k",
+        provider="deepseek", thinking_mode="high", max_retries=2,
+    )
+    llm._client = FakeClient()
+    result = llm.probe_connection()
+
+    assert result == {"ok": True}
+    assert len(requests) == 1
+    assert requests[0]["json"]["max_tokens"] == 64
+    assert requests[0]["json"]["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in requests[0]["json"]
+    assert requests[0]["timeout"] == 20.0
+
+
+def test_http_llm_reports_non_json_success_response():
+    from examforge.llm.http_llm import HttpLLM, LLMHttpError
+    from examforge.llm.schemas import GeneratedAnswer
+
+    class FakeRequest:
+        url = "https://proxy.test/chat/completions"
+
+    class FakeResponse:
+        status_code = 200
+        request = FakeRequest()
+        text = "<!DOCTYPE html><html><title>Not Found</title></html>"
+
+        def json(self):
+            raise ValueError("Expecting value")
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            return FakeResponse()
+
+    llm = HttpLLM(base_url="https://proxy.test", api_key="k", max_retries=0)
+    llm._client = FakeClient()
+    with pytest.raises(LLMHttpError) as caught:
+        llm._chat_json(system="s", user="u", schema_model=GeneratedAnswer)
+    assert "非 JSON" in caught.value.as_user_message()
+    assert "Not Found" in caught.value.as_user_message()
+
+
 def test_llm_http_timeout_message_mentions_effective_timeout():
     e = LLMHttpError(
         "LLM 请求超时: The read operation timed out",

@@ -43,6 +43,8 @@ def test_settings_save_llm_persists(client):
         "base_url": "https://api.test/v1",
         "api_key": "sk-xyz",
         "model": "test-model",
+        "provider": "openai",
+        "thinking_mode": "high",
         "timeout": "30.0",
     }, follow_redirects=False)
     assert r.status_code == 200
@@ -53,6 +55,8 @@ def test_settings_save_llm_persists(client):
     data = json.loads(settings_path.read_text(encoding="utf-8"))
     assert data["llm"]["api_key"] == "sk-xyz"
     assert data["llm"]["model"] == "test-model"
+    assert data["llm"]["provider"] == "openai"
+    assert data["llm"]["thinking_mode"] == "high"
     assert data["llm"]["timeout"] == 180.0
 
 
@@ -136,8 +140,8 @@ def test_settings_test_llm_with_mock_succeeds(client):
     assert body["ok"] is True
     assert body["backend"] == "mock"
     assert body["configured_backend"] == "mock"
-    assert body["method_count"] >= 1
-    assert body["answer_ok"] is True
+    assert body["probe_ok"] is True
+    assert body["probe_mode"] == "quick"
     assert body["elapsed_ms"] >= 0
 
 

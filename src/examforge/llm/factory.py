@@ -9,8 +9,19 @@
 
 import os
 import warnings
+from functools import lru_cache
 from .mock_llm import MockLLM
 from .http_llm import HttpLLM
+
+
+@lru_cache(maxsize=8)
+def _cached_http_llm(base_url: str, api_key: str, model: str, timeout: float,
+                     provider: str, thinking_mode: str) -> HttpLLM:
+    """Reuse httpx connection pools while the effective configuration is unchanged."""
+    return HttpLLM(
+        base_url=base_url, api_key=api_key, model=model, timeout=timeout,
+        provider=provider, thinking_mode=thinking_mode,
+    )
 
 
 def _fallback_llm():
@@ -22,6 +33,8 @@ def _fallback_llm():
         base = os.environ.get("EXAMFORGE_LLM_BASE", "https://api.deepseek.com/v1")
         key = os.environ.get("EXAMFORGE_LLM_KEY", "")
         model = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
+        provider = os.environ.get("EXAMFORGE_LLM_PROVIDER", "deepseek")
+        thinking_mode = os.environ.get("EXAMFORGE_LLM_THINKING_MODE", "auto")
         if not key:
             warnings.warn(
                 "LLM backend=http 但未配置 api_key,降级为 MockLLM",
@@ -29,7 +42,9 @@ def _fallback_llm():
             )
             return MockLLM()
         timeout = os.environ.get("EXAMFORGE_LLM_TIMEOUT", "180")
-        return HttpLLM(base_url=base, api_key=key, model=model, timeout=timeout)
+        return _cached_http_llm(
+            base, key, model, float(timeout), provider, thinking_mode,
+        )
     raise ValueError(f"未知 LLM backend: {backend!r}")
 
 
@@ -71,9 +86,9 @@ def get_llm(fail_open: bool = True):
             inst = MockLLM()
             inst.effective_backend = "mock_fallback_no_key"
             return inst
-        inst = HttpLLM(
-            base_url=s_llm.base_url, api_key=s_llm.api_key,
-            model=s_llm.model, timeout=s_llm.timeout,
+        inst = _cached_http_llm(
+            s_llm.base_url, s_llm.api_key, s_llm.model, float(s_llm.timeout),
+            s_llm.provider, s_llm.thinking_mode,
         )
         inst.effective_backend = "http"
         return inst

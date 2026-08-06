@@ -57,6 +57,28 @@ def test_answer_returns_qa_result_with_cited_methods(ctx):
     assert isinstance(r.cited_problem_ids, list)
 
 
+def test_answer_reuses_vector_hits_without_reembedding_all_methods(ctx):
+    from examforge.repositories import get_session
+
+    class CountingEmbedder(MockEmbedder):
+        def __init__(self):
+            self.calls = []
+
+        def embed(self, text):
+            self.calls.append(text)
+            return super().embed(text)
+
+    embedder = CountingEmbedder()
+    question = "含参不等式恒成立问题怎么做?"
+    result = answer(
+        question,
+        session=get_session(), llm=MockLLM(), embedder=embedder,
+        config=PipelineConfig(),
+    )
+    assert result.answer
+    assert embedder.calls == [question]
+
+
 def test_answer_can_use_selected_method_and_example_context(ctx):
     from examforge.repositories import get_session
     from sqlmodel import select
