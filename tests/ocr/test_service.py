@@ -264,3 +264,28 @@ def test_format_math_ocr_text_repairs_point_subscripts_and_triangle_vertices():
 def test_format_math_ocr_text_removes_extra_inline_dollar_without_touching_block_math():
     assert format_math_ocr_text(r"S_n=S_{n+1}$$。") == r"$S_n=S_{n+1}$。"
     assert format_math_ocr_text(r"$$x^2$$。") == r"$$x^2$$。"
+
+
+def test_format_math_ocr_text_restores_polar_equation_and_parametric_line_order():
+    raw = (
+        "22。在直角坐标系x Oy中，以坐标原点为极点，$x$轴正半轴为极轴建立极坐标系，"
+        "曲线$C$的极坐标方程为ρ$=$ρcosθ$+1$。\n"
+        "(1) 写出$C$的直角坐标方程；\n"
+        r"$l$：$\left\{\begin{array}{l}x=t$，\\ $y=t+a \end{array}\right$。"
+        "\n(2) 设直线（$t$为参数），若$C$与$l$相交于$A$，$B$两点，"
+        "且|$AB$|$=2$，求$a$。"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert "$xOy$" in formatted
+    assert r"$\rho=\rho\cos\theta+1$" in formatted
+    assert (
+        r"(2) 设直线$l:\begin{cases}x=t,\\y=t+a\end{cases}$"
+        r"（$t$为参数）"
+    ) in formatted
+    assert r"$|AB|=2$" in formatted
+    assert formatted.index("(1)") < formatted.index("(2)")
+    assert formatted.index("(2)") < formatted.index(r"\begin{cases}")
+    assert r"\begin{array}" not in formatted
+    assert "Missing" not in formatted

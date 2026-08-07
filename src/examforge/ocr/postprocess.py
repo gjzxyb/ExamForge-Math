@@ -70,6 +70,59 @@ def _repair_triangle_vertices(text: str) -> str:
     )
 
 
+def _repair_fragmented_math(text: str) -> str:
+    """合并 OCR 在单个公式内部误插的行内 ``$`` 分隔符。"""
+    text = re.sub(
+        r"ρ[ \t]*\$[ \t]*=[ \t]*\$[ \t]*ρ[ \t]*(?:cos|\\cos)"
+        r"[ \t]*θ[ \t]*\$[ \t]*\+[ \t]*(\d+)[ \t]*\$",
+        lambda match: rf"$\rho=\rho\cos\theta+{match.group(1)}$",
+        text,
+    )
+    return re.sub(
+        r"\|[ \t]*\$([A-Za-z0-9_{}]+)\$[ \t]*\|[ \t]*\$"
+        r"[ \t]*=[ \t]*([^$\n，。；]+)\$",
+        lambda match: f"$|{match.group(1)}|={match.group(2).strip()}$",
+        text,
+    )
+
+
+def _repair_array_latex(text: str) -> str:
+    """把被行内公式分隔符截断的单列参数方程转为完整 cases 环境。"""
+    malformed_array = re.compile(
+        r"\$?(?P<label>[A-Za-z])\$?\s*[：:]\s*\$?"
+        r"\\left\s*\\\{\s*\\begin\s*\{array\}\s*\{[^{}]+\}"
+        r"(?P<body>.*?)"
+        r"\\end\s*\{array\}\s*\\right\s*(?:\\?[.}]|\$)?"
+        r"(?P<punct>[。.]?)",
+        re.DOTALL,
+    )
+
+    def replace(match: re.Match[str]) -> str:
+        body = re.sub(r"(?<!\\)\$", "", match.group("body"))
+        rows = [row.strip().replace("，", ",") for row in body.split(r"\\")]
+        body = r"\\".join(row for row in rows if row)
+        return (
+            f"${match.group('label')}:\\begin{{cases}}"
+            f"{body}\\end{{cases}}${match.group('punct')}"
+        )
+
+    return malformed_array.sub(replace, text)
+
+
+def _repair_numbered_formula_order(text: str) -> str:
+    """把被坐标排序提前的参数方程放回“设直线”之后。"""
+    return re.sub(
+        r"(?P<formula>\$[A-Za-z]:\\begin\{cases\}[^$\n]+"
+        r"\\end\{cases\}\$)[。.]?[ \t]*\n+"
+        r"(?P<number>\([1-9]\d*\))[ \t]*(?P<intro>设直线)[ \t]*",
+        lambda match: (
+            f"{match.group('number')} {match.group('intro')}"
+            f"{match.group('formula')}"
+        ),
+        text,
+    )
+
+
 _SCALABLE_DELIMITER_TOKEN = (
     r"(?:\\(?:langle|rangle|lbrace|rbrace|vert|Vert)|"
     r"\\[{}|]|\(|\)|\[|\]|\||\.|<|>)"
@@ -341,6 +394,10 @@ def format_math_ocr_text(raw_text: str) -> str:
 
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n").strip()
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=[{_CJK}])", "", text)
+    text = re.sub(r"(?<=坐标系)[ \t]*x[ \t]*O[ \t]*y(?=中)", "$xOy$", text)
+    text = _repair_fragmented_math(text)
+    text = _repair_array_latex(text)
+    text = _repair_numbered_formula_order(text)
     text = re.sub(r"(?<=概率为)[ \t]+P(?=[ \t]*(?:\\left|\(|（|，|,))", "p", text)
     text = re.sub(
         r"\([ \t]*0[ \t]*[，,][ \t]*\+[ \t]*∞[ \t]*\)",
