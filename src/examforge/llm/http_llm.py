@@ -18,7 +18,9 @@ DEFAULT_MODEL = os.environ.get("EXAMFORGE_LLM_MODEL", "deepseek-chat")
 MIN_HTTP_LLM_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_MIN_TIMEOUT", "180"))
 HTTP_LLM_CONNECT_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_CONNECT_TIMEOUT", "15"))
 HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30"))
-MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "8192"))
+# DeepSeek thinking mode counts reasoning and visible JSON in max_tokens. Keep
+# the first request modest, but allow retries to grow beyond the old 8192 cap.
+MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "32768"))
 ANSWER_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_ANSWER_TOKENS", "8192"))
 THINKING_MODES = {"auto", "disabled", "low", "high", "max"}
 CONNECTION_PROBE_TIMEOUT = 20.0
@@ -76,14 +78,21 @@ def _validate_llm_json(content: str, schema_model: type) -> Any:
     return TypeAdapter(schema_model).validate_python(_normalize_llm_json_payload(data))
 
 
-def _json_validation_message(exc: ValidationError, *, finish_reason: str | None) -> str:
+def _json_validation_message(
+    exc: ValidationError,
+    *,
+    finish_reason: str | None,
+    retrying: bool,
+) -> str:
     """把模型截断导致的 Pydantic JSON 错误转换为可重试、可读的错误。"""
     detail = str(exc)
     truncated = finish_reason == "length" or any(marker in detail for marker in (
         "EOF while parsing", "EOF while parsing a string", "json_eof",
     ))
     if truncated:
-        return "LLM 输出达到长度上限，返回的 JSON 被截断；系统将增大输出上限后重试"
+        if retrying:
+            return "LLM 输出达到长度上限，返回的 JSON 被截断；系统将增大输出上限后重试"
+        return "LLM 输出达到长度上限，返回的 JSON 被截断；已重试仍未完成，请降低思考强度或缩短题干"
     return f"LLM 返回的 JSON 格式无效: {detail[:400]}"
 
 class LLMHttpError(RuntimeError):
@@ -257,6 +266,7 @@ class HttpLLM:
                         _json_validation_message(
                             exc,
                             finish_reason=choice.get("finish_reason"),
+                            retrying=attempt < retry_limit,
                         ),
                         request_url=str(resp.request.url),
                     )

@@ -196,7 +196,7 @@ def test_generate_answer_starts_with_full_output_budget_and_shortens_retry(monke
 
     assert result.analysis_steps == "精简完整步骤"
     assert requests[0]["max_tokens"] == 8192
-    assert requests[1]["max_tokens"] == 8192
+    assert requests[1]["max_tokens"] == 16384
     assert "上一次回答因过长被截断" not in requests[0]["messages"][1]["content"]
     assert "上一次回答因过长被截断" in requests[1]["messages"][1]["content"]
     assert "3500" in requests[1]["messages"][1]["content"]
@@ -234,6 +234,7 @@ def test_http_llm_reports_truncated_json_as_friendly_error(monkeypatch):
         )
 
     assert "JSON 被截断" in caught.value.as_user_message()
+    assert "已重试仍未完成" in caught.value.as_user_message()
     assert "ValidationError" not in caught.value.as_user_message()
 
 
