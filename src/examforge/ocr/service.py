@@ -15,6 +15,11 @@ from ..config.settings import OCRSettings, get_settings
 from .postprocess import format_math_ocr_text
 
 
+_STRUCTURED_LATEX_ENV = re.compile(
+    r"\\begin\s*\{(?:array|cases|matrix|pmatrix|bmatrix|aligned|gathered)\}"
+)
+
+
 class OCRError(RuntimeError):
     """OCR 调用失败时的用户友好异常。"""
 
@@ -106,6 +111,14 @@ def _extract_aliyun_layout_text(obj: Any) -> str:
 
     words = obj.get("prism_wordsInfo")
     if not isinstance(words, list) or not words:
+        return ""
+    if any(
+        isinstance(item, dict)
+        and _STRUCTURED_LATEX_ENV.search(str(item.get("word", "")))
+        for item in words
+    ):
+        # 高括号/矩阵的坐标框横跨多行，按 min(y) 排序会拆散环境。
+        # 返回空值，让调用方使用厂商 content 中已经确定的读取顺序。
         return ""
 
     positioned: list[tuple[int, int, str]] = []

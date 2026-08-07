@@ -85,6 +85,20 @@ def test_extract_aliyun_layout_text_attaches_fraction_to_following_question():
     assert formatted.index("(1)") < formatted.index("(2)") < formatted.index("(3)")
 
 
+def test_extract_aliyun_layout_text_defers_structured_array_to_vendor_content():
+    words = [
+        {"word": r"\left\{\begin{array}{l}-x^2-", "pos": [{"x": 150, "y": 10}]},
+        {"word": r"\end{array}\right.", "pos": [{"x": 0, "y": 30}]},
+        {"word": "2ax-a，x<0", "pos": [{"x": 0, "y": 50}]},
+    ]
+    data = {
+        "content": r"已知函数f(x)=\left\{\begin{array}{l}-x^2-2ax-a，x<0，\\e^x+\ln(x+1)，x\ge0，\end{array}\right.在R上单调递增",
+        "prism_wordsInfo": words,
+    }
+
+    assert _extract_aliyun_layout_text(data) == ""
+
+
 def test_official_aliyun_endpoint_uses_signed_sdk_path(monkeypatch):
     settings = OCRSettings(
         provider="aliyun",
@@ -289,3 +303,21 @@ def test_format_math_ocr_text_restores_polar_equation_and_parametric_line_order(
     assert formatted.index("(2)") < formatted.index(r"\begin{cases}")
     assert r"\begin{array}" not in formatted
     assert "Missing" not in formatted
+
+
+def test_format_math_ocr_text_repairs_piecewise_function_array():
+    raw = (
+        r"已知函数$f(x)=\left\{\begin{array}{l}-x^2-2ax-a$，$x<0$，\\ "
+        r"$e^x+\ln(x+1)$，$x\ge0$，\end{array}\right.$在$R$上单调递增，"
+        "则$a$的取值范围是（ ）"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert (
+        r"$f(x)=\begin{cases}-x^2-2ax-a,&x<0,\\"
+        r"e^x+\ln(x+1),&x\ge0,\end{cases}$"
+    ) in formatted
+    assert r"\begin{array}" not in formatted
+    assert r"\end{array}" not in formatted
+    assert formatted.count("$") % 2 == 0

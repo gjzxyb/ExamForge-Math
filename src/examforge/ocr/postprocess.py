@@ -87,26 +87,67 @@ def _repair_fragmented_math(text: str) -> str:
 
 
 def _repair_array_latex(text: str) -> str:
-    """把被行内公式分隔符截断的单列参数方程转为完整 cases 环境。"""
-    malformed_array = re.compile(
-        r"\$?(?P<label>[A-Za-z])\$?\s*[：:]\s*\$?"
+    """把被行内公式分隔符截断的数组/分段函数转为完整 cases 环境。"""
+    array_body = (
         r"\\left\s*\\\{\s*\\begin\s*\{array\}\s*\{[^{}]+\}"
         r"(?P<body>.*?)"
         r"\\end\s*\{array\}\s*\\right\s*(?:\\?[.}]|\$)?"
-        r"(?P<punct>[。.]?)",
+    )
+
+    def clean_body(value: str, *, align_conditions: bool) -> str:
+        value = re.sub(r"(?<!\\)\$", "", value)
+        rows: list[str] = []
+        for raw_row in value.split(r"\\"):
+            row = raw_row.strip().replace("，", ",")
+            if not row:
+                continue
+            if align_conditions:
+                compact = row.rstrip(",")
+                expression, separator, condition = compact.rpartition(",")
+                if separator and re.search(r"(?:[<>]=?|\\(?:ge|le)|≥|≤)", condition):
+                    row = f"{expression},&{condition},"
+            rows.append(row)
+        return r"\\".join(rows)
+
+    malformed_array = re.compile(
+        r"\$?(?P<label>[A-Za-z])\$?\s*[：:]\s*\$?"
+        + array_body
+        + r"(?P<punct>[。.]?)",
         re.DOTALL,
     )
 
     def replace(match: re.Match[str]) -> str:
-        body = re.sub(r"(?<!\\)\$", "", match.group("body"))
-        rows = [row.strip().replace("，", ",") for row in body.split(r"\\")]
-        body = r"\\".join(row for row in rows if row)
+        body = clean_body(match.group("body"), align_conditions=False)
         return (
             f"${match.group('label')}:\\begin{{cases}}"
             f"{body}\\end{{cases}}${match.group('punct')}"
         )
 
-    return malformed_array.sub(replace, text)
+    text = malformed_array.sub(replace, text)
+
+    function_array = re.compile(
+        r"\$?(?P<head>[A-Za-z]\s*\([^()\n]*\)\s*=\s*)"
+        + array_body
+        + r"\$?",
+        re.DOTALL,
+    )
+
+    def replace_function(match: re.Match[str]) -> str:
+        head = re.sub(r"[ \t]+", "", match.group("head"))
+        body = clean_body(match.group("body"), align_conditions=True)
+        return f"${head}\\begin{{cases}}{body}\\end{{cases}}$"
+
+    text = function_array.sub(replace_function, text)
+
+    standalone_array = re.compile(r"\$?" + array_body + r"\$?", re.DOTALL)
+    return standalone_array.sub(
+        lambda match: (
+            "$\\begin{cases}"
+            f"{clean_body(match.group('body'), align_conditions=True)}"
+            "\\end{cases}$"
+        ),
+        text,
+    )
 
 
 def _repair_numbered_formula_order(text: str) -> str:
