@@ -97,6 +97,9 @@ uv run python tests/acceptance/run_eval.py   # 黄金集评估
 - `EXAMFORGE_EMBED_BACKEND` ∈ {`mock`, `http`}  默认 `mock`
 - `EXAMFORGE_LLM_PROVIDER` / `EXAMFORGE_LLM_BASE` / `EXAMFORGE_LLM_KEY` / `EXAMFORGE_LLM_MODEL` (默认 DeepSeek)
 - `EXAMFORGE_LLM_THINKING_MODE` ∈ {`auto`, `disabled`, `low`, `high`, `max`}
+- `EXAMFORGE_LLM_ANSWER_TOKENS`（首次答案输出预算，默认 `8192`）
+- `EXAMFORGE_LLM_MAX_JSON_TOKENS`（普通兼容模型重试上限，默认 `32768`）
+- `EXAMFORGE_LLM_LONG_CONTEXT_MAX_JSON_TOKENS`（DeepSeek V4 长上下文重试上限，默认 `131072`）
 - `EXAMFORGE_EMBED_BASE` / `EXAMFORGE_EMBED_KEY` / `EXAMFORGE_EMBED_MODEL`
 - `EXAMFORGE_OCR_PROVIDER` ∈ {`none`, `mock`, `tencent`, `aliyun`}
 - `EXAMFORGE_OCR_KEY_ID` / `EXAMFORGE_OCR_KEY_SECRET` / `EXAMFORGE_OCR_REGION` / `EXAMFORGE_OCR_ENDPOINT`

@@ -14,6 +14,19 @@ from ..repositories import SolutionRepo, ProblemRepo
 from ..config import PipelineConfig
 
 
+_FOCUSED_CONTEXT_LIMIT = 12_000
+_FOCUSED_NOTE_LIMIT = 4_000
+
+
+def _bounded_context(value: object, limit: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= limit:
+        return text
+    head = int(limit * 0.75)
+    tail = limit - head
+    return f"{text[:head]}\n...[中间内容已压缩]...\n{text[-tail:]}"
+
+
 def _method_doc(method: Method, examples: list[dict]) -> str:
     ex_lines: list[str] = []
     for e in examples:
@@ -22,15 +35,27 @@ def _method_doc(method: Method, examples: list[dict]) -> str:
         if e.get("focus"):
             details = []
             if e.get("stem"):
-                details.append(f"  题干:{str(e['stem'])[:500]}")
+                details.append(
+                    f"  题干:{_bounded_context(e['stem'], _FOCUSED_CONTEXT_LIMIT)}"
+                )
             if e.get("answer"):
-                details.append(f"  答案:{e['answer']}")
+                details.append(
+                    f"  答案:{_bounded_context(e['answer'], _FOCUSED_NOTE_LIMIT)}"
+                )
             if e.get("official_analysis_steps"):
-                details.append(f"  官方解析:{str(e['official_analysis_steps'])[:500]}")
+                details.append(
+                    "  官方解析:"
+                    f"{_bounded_context(e['official_analysis_steps'], _FOCUSED_CONTEXT_LIMIT)}"
+                )
             if e.get("key_steps"):
-                details.append(f"  本方法关键步骤:{str(e['key_steps'])[:500]}")
+                details.append(
+                    "  本方法关键步骤:"
+                    f"{_bounded_context(e['key_steps'], _FOCUSED_NOTE_LIMIT)}"
+                )
             if e.get("transfer_note"):
-                details.append(f"  迁移提示:{str(e['transfer_note'])[:300]}")
+                details.append(
+                    f"  迁移提示:{_bounded_context(e['transfer_note'], _FOCUSED_NOTE_LIMIT)}"
+                )
             if details:
                 line = "\n".join([line, *details])
         ex_lines.append(line)
@@ -144,7 +169,7 @@ def answer(
     if selected_method is not None:
         method_doc = _method_doc(selected_method, selected_examples)
         result = llm.answer_question(
-            question=question, method_doc=method_doc, examples=selected_examples,
+            question=question, method_doc=method_doc, examples=[],
         )
         return _with_citations(result, method=selected_method, problem_id=selected_problem_id)
 
@@ -180,5 +205,5 @@ def answer(
     examples = _example_rows(session, top_method.id)
     method_doc = _method_doc(top_method, examples)
     return llm.answer_question(
-        question=question, method_doc=method_doc, examples=examples,
+        question=question, method_doc=method_doc, examples=[],
     )

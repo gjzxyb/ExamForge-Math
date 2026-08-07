@@ -21,6 +21,10 @@ HTTP_LLM_WRITE_TIMEOUT = float(os.environ.get("EXAMFORGE_LLM_WRITE_TIMEOUT", "30
 # DeepSeek thinking mode counts reasoning and visible JSON in max_tokens. Keep
 # the first request modest, but allow retries to grow beyond the old 8192 cap.
 MAX_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_MAX_JSON_TOKENS", "32768"))
+LONG_CONTEXT_MAX_JSON_OUTPUT_TOKENS = int(
+    os.environ.get("EXAMFORGE_LLM_LONG_CONTEXT_MAX_JSON_TOKENS", "131072")
+)
+TRUNCATION_TOKEN_GROWTH = 4
 ANSWER_JSON_OUTPUT_TOKENS = int(os.environ.get("EXAMFORGE_LLM_ANSWER_TOKENS", "8192"))
 THINKING_MODES = {"auto", "disabled", "low", "high", "max"}
 CONNECTION_PROBE_TIMEOUT = 20.0
@@ -78,6 +82,17 @@ def _validate_llm_json(content: str, schema_model: type) -> Any:
     return TypeAdapter(schema_model).validate_python(_normalize_llm_json_payload(data))
 
 
+def _is_truncated_json_error(
+    exc: ValidationError,
+    *,
+    finish_reason: str | None,
+) -> bool:
+    detail = str(exc)
+    return finish_reason == "length" or any(marker in detail for marker in (
+        "EOF while parsing", "EOF while parsing a string", "json_eof",
+    ))
+
+
 def _json_validation_message(
     exc: ValidationError,
     *,
@@ -86,9 +101,7 @@ def _json_validation_message(
 ) -> str:
     """把模型截断导致的 Pydantic JSON 错误转换为可重试、可读的错误。"""
     detail = str(exc)
-    truncated = finish_reason == "length" or any(marker in detail for marker in (
-        "EOF while parsing", "EOF while parsing a string", "json_eof",
-    ))
+    truncated = _is_truncated_json_error(exc, finish_reason=finish_reason)
     if truncated:
         if retrying:
             return "LLM 输出达到长度上限，返回的 JSON 被截断；系统将增大输出上限后重试"
@@ -186,6 +199,12 @@ class HttpLLM:
             return {"reasoning_effort": "none" if mode == "disabled" else ("high" if mode == "max" else mode)}
         return {}
 
+    def _json_output_token_cap(self) -> int:
+        """Return a conservative task-output cap while allowing DeepSeek V4 retries."""
+        if self.provider == "deepseek" and self.model.lower().startswith("deepseek-v4"):
+            return LONG_CONTEXT_MAX_JSON_OUTPUT_TOKENS
+        return MAX_JSON_OUTPUT_TOKENS
+
     @staticmethod
     def _decode_response(resp: httpx.Response, request_url: str) -> dict[str, Any]:
         try:
@@ -221,13 +240,14 @@ class HttpLLM:
             system = system.rstrip() + "\nReturn the result as valid json only."
         last_err: Exception | None = None
         retry_limit = self._max_retries if max_retries_override is None else max_retries_override
+        truncation_retries = 0
         for attempt in range(retry_limit + 1):
             try:
                 request_max_tokens = None
                 if max_tokens:
                     request_max_tokens = min(
-                        max_tokens * (2 ** attempt),
-                        MAX_JSON_OUTPUT_TOKENS,
+                        max_tokens * (TRUNCATION_TOKEN_GROWTH ** truncation_retries),
+                        self._json_output_token_cap(),
                     )
                 resp = self._client.post(
                     f"{self.base_url}/chat/completions",
@@ -238,7 +258,9 @@ class HttpLLM:
                             {"role": "system", "content": system},
                             {
                                 "role": "user",
-                                "content": user + (retry_user_suffix if attempt else ""),
+                                "content": user + (
+                                    retry_user_suffix if truncation_retries else ""
+                                ),
                             },
                         ],
                         "response_format": {"type": "json_object"},
@@ -262,6 +284,10 @@ class HttpLLM:
                 try:
                     return _validate_llm_json(content, schema_model)
                 except ValidationError as exc:
+                    truncated = _is_truncated_json_error(
+                        exc,
+                        finish_reason=choice.get("finish_reason"),
+                    )
                     last_err = LLMHttpError(
                         _json_validation_message(
                             exc,
@@ -271,6 +297,8 @@ class HttpLLM:
                         request_url=str(resp.request.url),
                     )
                     if attempt < retry_limit:
+                        if truncated:
+                            truncation_retries += 1
                         import time
                         time.sleep(2 ** attempt)
                         continue

@@ -140,6 +140,8 @@ def answer_user_prompt(
 
 请输出 JSON,字段:
 - answer: 答案/最终结果,可含 LaTeX
-- analysis_steps: 3500 个中文字符以内的 Markdown 详细推导步骤;必须分节换行,数学公式用标准 LaTeX,关键公式单独用 $$...$$ 展示;覆盖审题、转化、计算、验证、易错点/假设;若使用全网搜索参考,仅简短列出采用的来源标题
+- analysis_steps: 3500 个中文字符以内的 Markdown 详细推导步骤,覆盖审题、转化、计算、验证和易错点;数学公式使用标准 LaTeX
 - confidence: 0 到 1 的置信度
+
+严格遵守 system prompt 的格式要求,只返回 JSON 对象,不要附加说明。
 """

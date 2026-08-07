@@ -154,7 +154,7 @@ def test_http_llm_retries_truncated_generated_answer_with_more_tokens(monkeypatc
 
     assert out.answer == "$a=2$"
     assert out.analysis_steps == "完整步骤"
-    assert [request["max_tokens"] for request in requests] == [4096, 8192]
+    assert [request["max_tokens"] for request in requests] == [4096, 16384]
 
 
 def test_generate_answer_starts_with_full_output_budget_and_shortens_retry(monkeypatch):
@@ -196,7 +196,7 @@ def test_generate_answer_starts_with_full_output_budget_and_shortens_retry(monke
 
     assert result.analysis_steps == "精简完整步骤"
     assert requests[0]["max_tokens"] == 8192
-    assert requests[1]["max_tokens"] == 16384
+    assert requests[1]["max_tokens"] == 32768
     assert "上一次回答因过长被截断" not in requests[0]["messages"][1]["content"]
     assert "上一次回答因过长被截断" in requests[1]["messages"][1]["content"]
     assert "3500" in requests[1]["messages"][1]["content"]
@@ -238,6 +238,44 @@ def test_http_llm_reports_truncated_json_as_friendly_error(monkeypatch):
     assert "ValidationError" not in caught.value.as_user_message()
 
 
+def test_http_llm_transient_retry_keeps_original_token_budget(monkeypatch):
+    from examforge.llm.http_llm import HttpLLM
+    from examforge.llm.schemas import GeneratedAnswer
+
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    requests = []
+
+    class FakeRequest:
+        url = "https://llm.test/v1/chat/completions"
+
+    class FakeResponse:
+        request = FakeRequest()
+
+        def __init__(self, status_code):
+            self.status_code = status_code
+            self.text = "temporary" if status_code == 500 else "ok"
+
+        def json(self):
+            return {"choices": [{
+                "finish_reason": "stop",
+                "message": {"content": '{"answer":"2","analysis_steps":"步骤","confidence":0.8}'},
+            }]}
+
+    class FakeClient:
+        def post(self, *args, **kwargs):
+            requests.append(kwargs["json"])
+            return FakeResponse(500 if len(requests) == 1 else 200)
+
+    llm = HttpLLM(base_url="https://llm.test/v1", api_key="k", max_retries=1)
+    llm._client = FakeClient()
+    result = llm._chat_json(
+        system="s", user="u", schema_model=GeneratedAnswer, max_tokens=4096,
+    )
+
+    assert result.answer == "2"
+    assert [request["max_tokens"] for request in requests] == [4096, 4096]
+
+
 def test_llm_http_error_includes_request_error_message_without_status():
     e = LLMHttpError(
         "LLM 请求超时: 请求超过 3 秒未返回",
@@ -272,6 +310,22 @@ def test_http_llm_maps_thinking_mode_for_providers():
     assert HttpLLM(provider="openai", thinking_mode="disabled")._thinking_parameters() == {
         "reasoning_effort": "none",
     }
+
+
+def test_http_llm_uses_long_output_cap_only_for_deepseek_v4():
+    from examforge.llm.http_llm import HttpLLM
+
+    v4 = HttpLLM(
+        base_url="https://llm.test/v1", api_key="k",
+        provider="deepseek", model="deepseek-v4-flash", max_retries=0,
+    )
+    legacy = HttpLLM(
+        base_url="https://llm.test/v1", api_key="k",
+        provider="deepseek", model="deepseek-chat", max_retries=0,
+    )
+
+    assert v4._json_output_token_cap() == 131072
+    assert legacy._json_output_token_cap() == 32768
 
 
 def test_http_llm_connection_probe_is_single_small_non_thinking_request():

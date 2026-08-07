@@ -101,3 +101,31 @@ def test_answer_can_use_selected_method_and_example_context(ctx):
     assert "分离参数法" in r.cited_method_names
     assert problem.id in r.cited_problem_ids
     assert "分离参数法" in r.answer
+
+
+def test_method_doc_keeps_focused_context_without_repeating_example_payload(ctx):
+    from examforge.qa.qa import _method_doc
+
+    from examforge.repositories import get_session
+    from sqlmodel import select
+
+    s = get_session()
+    method = s.exec(select(Method).where(Method.name == "分离参数法")).first()
+    assert method is not None
+    long_stem = "题干信息" * 400
+    doc = _method_doc(method, [{
+        "id": 1,
+        "year": 2023,
+        "region": "A",
+        "summary": "选中例题摘要",
+        "focus": True,
+        "stem": long_stem,
+        "answer": "答案",
+        "official_analysis_steps": "解析",
+        "key_steps": "步骤",
+        "transfer_note": "迁移",
+    }])
+
+    assert "题干信息" in doc
+    assert len(doc) > 500
+    assert doc.count("选中例题摘要") == 1
