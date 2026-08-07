@@ -146,6 +146,8 @@ def _extract_aliyun_layout_text(obj: Any) -> str:
         # 仅将紧邻题号行前的分式归回该题，避免改变普通段落换行。
         if (
             "\\frac" in line
+            and not re.search(r"[\u3400-\u4dbf\u4e00-\u9fff]", line)
+            and not block_start.match(line)
             and index + 1 < len(physical_lines)
             and block_start.match(physical_lines[index + 1])
         ):
@@ -163,6 +165,28 @@ def _extract_aliyun_layout_text(obj: Any) -> str:
             logical_lines.append(line)
         else:
             logical_lines[-1] += line
+
+    question_start = re.compile(r"^\(([1-9]\d*)\)")
+    starts = [
+        (index, int(match.group(1)))
+        for index, line in enumerate(logical_lines)
+        if (match := question_start.match(line))
+    ]
+    numbers = [number for _, number in starts]
+    if len(starts) > 1 and len(numbers) == len(set(numbers)):
+        prefix = logical_lines[: starts[0][0]]
+        blocks = [
+            (number, logical_lines[start:next_start])
+            for (start, number), (next_start, _) in zip(
+                starts,
+                starts[1:] + [(len(logical_lines), 0)],
+            )
+        ]
+        logical_lines = prefix + [
+            line
+            for _, block in sorted(blocks)
+            for line in block
+        ]
     return "\n".join(logical_lines)
 
 

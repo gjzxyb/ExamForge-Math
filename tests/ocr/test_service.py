@@ -59,7 +59,11 @@ def test_extract_aliyun_layout_text_restores_blocks_and_merges_visual_wrap():
 def test_extract_aliyun_layout_text_attaches_fraction_to_following_question():
     words = [
         {"word": "(1)若k=\\frac{1}{2}，求x_2，y_2；", "pos": [{"x": 0, "y": 10}]},
-        {"word": r"\frac{1+k}{1-k}", "pos": [{"x": 330, "y": 45}]},
+        {
+            "word": "(3)设S_n为三角形面积。证明：S_n=S_{n+1}。",
+            "pos": [{"x": 0, "y": 40}],
+        },
+        {"word": r"\frac{1+k}{1-k}", "pos": [{"x": 330, "y": 48}]},
         {
             "word": "(2)证明：数列{x_n-y_n}是公比为的等比数列；",
             "pos": [{"x": 0, "y": 60}],
@@ -71,11 +75,14 @@ def test_extract_aliyun_layout_text_attaches_fraction_to_following_question():
         r"(1)若k=\frac{1}{2}，求x_2，y_2；"
         "\n"
         r"(2)证明：数列{x_n-y_n}是公比为\frac{1+k}{1-k}的等比数列；"
+        "\n"
+        "(3)设S_n为三角形面积。证明：S_n=S_{n+1}。"
     )
 
     formatted = format_math_ocr_text(_extract_aliyun_layout_text(data))
     assert r"公比为$\frac{1+k}{1-k}$的等比数列" in formatted
     assert r"等比数列；$\frac" not in formatted
+    assert formatted.index("(1)") < formatted.index("(2)") < formatted.index("(3)")
 
 
 def test_official_aliyun_endpoint_uses_signed_sdk_path(monkeypatch):
