@@ -149,7 +149,13 @@ def _extract_aliyun_layout_text(obj: Any) -> str:
             and index + 1 < len(physical_lines)
             and block_start.match(physical_lines[index + 1])
         ):
-            physical_lines[index + 1] += line
+            target = physical_lines[index + 1]
+            ratio_anchor = re.search(r"公比为(?=\s*的等比数列)", target)
+            if ratio_anchor:
+                insert_at = ratio_anchor.end()
+                physical_lines[index + 1] = target[:insert_at] + line + target[insert_at:]
+            else:
+                physical_lines[index + 1] += line
             continue
         if not logical_lines or block_start.match(line):
             logical_lines.append(line)
