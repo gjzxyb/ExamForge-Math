@@ -56,6 +56,21 @@ def test_extract_aliyun_layout_text_restores_blocks_and_merges_visual_wrap():
     )
 
 
+def test_extract_aliyun_layout_text_attaches_fraction_to_following_question():
+    words = [
+        {"word": "(1)若k=\\frac{1}{2}，求x_2，y_2；", "pos": [{"x": 0, "y": 10}]},
+        {"word": r"\frac{1+k}{1-k}", "pos": [{"x": 330, "y": 45}]},
+        {"word": "(2)证明：数列{x_n-y_n}是公比为", "pos": [{"x": 0, "y": 60}]},
+    ]
+    data = {"Data": json.dumps({"prism_wordsInfo": words})}
+
+    assert _extract_aliyun_layout_text(data) == (
+        r"(1)若k=\frac{1}{2}，求x_2，y_2；"
+        "\n"
+        r"(2)证明：数列{x_n-y_n}是公比为\frac{1+k}{1-k}"
+    )
+
+
 def test_official_aliyun_endpoint_uses_signed_sdk_path(monkeypatch):
     settings = OCRSettings(
         provider="aliyun",

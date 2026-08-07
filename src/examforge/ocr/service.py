@@ -139,8 +139,17 @@ def _extract_aliyun_layout_text(obj: Any) -> str:
     ]
     logical_lines: list[str] = []
     block_start = re.compile(r"^(?:\([1-9]\d*\)|[①-⑳]|[A-D][.、])")
-    for line in physical_lines:
+    for index, line in enumerate(physical_lines):
         if not line:
+            continue
+        # 分式的包围框可能跨越题号行上方和下方，导致它被识别为独立行。
+        # 仅将紧邻题号行前的分式归回该题，避免改变普通段落换行。
+        if (
+            "\\frac" in line
+            and index + 1 < len(physical_lines)
+            and block_start.match(physical_lines[index + 1])
+        ):
+            physical_lines[index + 1] += line
             continue
         if not logical_lines or block_start.match(line):
             logical_lines.append(line)
