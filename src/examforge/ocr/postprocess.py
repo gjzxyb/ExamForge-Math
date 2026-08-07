@@ -6,10 +6,8 @@ import re
 
 
 _CJK = r"\u3400-\u4dbf\u4e00-\u9fff"
-_MATH_RUN = re.compile(
-    r"(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),'])"
-    r"(?:[ \t]*(?:\\[A-Za-z]+|[A-Za-z0-9_{}^+\-<>=(),']))*"
-)
+_MATH_TOKEN = r"(?:\\[A-Za-z]+|\\[{}|]|[A-Za-z0-9_{}^+\-<>=(),'])"
+_MATH_RUN = re.compile(rf"{_MATH_TOKEN}(?:[ \t]*{_MATH_TOKEN})*")
 _GEOMETRY_COMMANDS = r"parallel|perp|angle|triangle|arc|cong|sim"
 _DELIMITED_MATH = re.compile(r"(\$\$.*?\$\$|\$.*?\$)", re.DOTALL)
 
@@ -47,6 +45,29 @@ def _repair_geometry_latex(text: str) -> str:
         text,
     )
     return _separate_geometry_commands(text)
+
+
+def _repair_malformed_math_delimiters(text: str) -> str:
+    """修复 OCR 把集合花括号与行内公式分隔符混在一起的情况。"""
+    return re.sub(
+        r"\\left[ \t]*\$[ \t]*\\\$[ \t]*\{"
+        r"(?P<body>.*?)"
+        r"\\right[ \t]*\$[ \t]*\\\}",
+        lambda match: rf"\left\{{{match.group('body').strip()}\right\}}",
+        text,
+        flags=re.DOTALL,
+    )
+
+
+def _repair_triangle_vertices(text: str) -> str:
+    """移除 OCR 为三角形各顶点添加的多余参数花括号。"""
+    point = r"[A-Z](?:')?(?:_\s*(?:\{[^{}]+\}|[A-Za-z0-9]+(?:\s*[+\-]\s*\d+)?))?"
+    return re.sub(
+        rf"\\triangle\s*\{{\s*([^{{}}]+?)\s*\}}"
+        rf"\s*\{{\s*([^{{}}]+?)\s*\}}\s*({point})",
+        lambda match: "\\triangle " + " ".join(match.groups()),
+        text,
+    )
 
 
 _SCALABLE_DELIMITER_TOKEN = (
@@ -174,6 +195,15 @@ def _close_unmatched_inline_math(text: str) -> str:
     return f"{text[:start + 1]}{body}${remainder}"
 
 
+def _repair_redundant_inline_dollars(text: str) -> str:
+    """移除行内公式闭合后多出的 ``$``，不改动 ``$$...$$`` 块公式。"""
+    return re.sub(
+        r"(?<!\$)(\$[^$\n]+\$)\$+(?=[，。；：！？、\n]|$)",
+        r"\1",
+        text,
+    )
+
+
 def _compact_latex(text: str) -> str:
     text = re.sub(
         r"\\(operatorname|mathrm|mathbf|mathit|mathcal|mathbb|text)"
@@ -216,7 +246,39 @@ def _repair_sequence_subscripts(text: str) -> str:
         lambda m: f"{m.group(1)}_{{{''.join(m.group(2).split())}}}",
         text,
     )
-    return re.sub(r"(?<![A-Za-z])([pq])\s*(\d+)\b", r"\1_{\2}", text)
+    text = re.sub(r"(?<![A-Za-z])([pq])\s*(\d+)\b", r"\1_{\2}", text)
+
+    # 点名序列常被 OCR 识别为 ``Qn-1``、``Pn+1`` 或 ``P_n+1``。
+    text = re.sub(
+        r"(?<![A-Za-z])([PQ])\s*_\s*\{\s*([nmk0-9]+)\s*([+\-])\s*(\d+)\s*\}",
+        lambda match: f"{match.group(1)}_{{{match.group(2)}{match.group(3)}{match.group(4)}}}",
+        text,
+    )
+    text = re.sub(
+        r"(?<![A-Za-z])([PQ])\s*_\s*([nmk0-9]+)\s*([+\-])\s*(\d+)",
+        lambda match: f"{match.group(1)}_{{{match.group(2)}{match.group(3)}{match.group(4)}}}",
+        text,
+    )
+    text = re.sub(
+        r"(?<![A-Za-z])([PQ])\s*([nmk])\s*([+\-])\s*(\d+)(?![A-Za-z0-9])",
+        lambda match: f"{match.group(1)}_{{{match.group(2)}{match.group(3)}{match.group(4)}}}",
+        text,
+    )
+    text = re.sub(
+        r"(?<![A-Za-z])([PQ])\s*_\s*([nmk0-9])(?![A-Za-z0-9])",
+        r"\1_\2",
+        text,
+    )
+    text = re.sub(
+        r"(?<![A-Za-z])([PQ])\s*([nmk])(?![A-Za-z0-9])",
+        r"\1_\2",
+        text,
+    )
+    return re.sub(
+        r"(?<![A-Za-z])([PQ])\s*(\d+)(?![A-Za-z0-9])",
+        r"\1_\2",
+        text,
+    )
 
 
 def _looks_like_math(value: str) -> bool:
@@ -293,6 +355,8 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = text.replace("∞", r"\infty")
     text = text.replace("≥", r"\ge ").replace("≤", r"\le ").replace("≠", r"\ne ")
     text = _repair_geometry_latex(text)
+    text = _repair_malformed_math_delimiters(text)
+    text = _repair_triangle_vertices(text)
     text = _repair_scalable_delimiters(text)
     text = _compact_latex(text)
     text = _repair_sequence_subscripts(text)
@@ -309,6 +373,7 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = re.sub(r"\(([^()\n]*[\u3400-\u9fff][^()\n]*)\)", r"（\1）", text)
 
     text = re.sub(r"[ \t]*([，。；：！？、])[ \t]*", r"\1", text)
+    text = re.sub(r"([，。；：！？、])(?:\1)+", r"\1", text)
     text = re.sub(r"(?:，[ \t]*){2,}", "，", text)
     text = re.sub(r"(?:。[ \t]*){2,}", "。", text)
     text = re.sub(
@@ -335,5 +400,6 @@ def format_math_ocr_text(raw_text: str) -> str:
     text = _wrap_math_runs(text)
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=\$)", "", text)
     text = re.sub(rf"(?<=\$)[ \t]+(?=[{_CJK}，。；：！？、（])", "", text)
+    text = _repair_redundant_inline_dollars(text)
     text = _close_unmatched_inline_math(text)
     return text.strip()

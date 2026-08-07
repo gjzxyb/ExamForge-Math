@@ -138,13 +138,14 @@ def test_format_math_ocr_text_uses_colon_before_numbered_subquestions():
 
 
 def test_format_math_ocr_text_removes_common_duplicate_ocr_tokens():
-    raw = "(1)证明：f(x) )在区间内；①设g(t). .证明结论；② ②比较大小。"
+    raw = "(1)证明：：f(x) )在区间内；①设g(t). .证明结论；② ②比较大小。"
 
     formatted = format_math_ocr_text(raw)
 
     assert "$f(x)$在区间内" in formatted
     assert "$g(t)$。证明结论" in formatted
     assert formatted.count("②") == 1
+    assert "：：" not in formatted
     assert "))" not in formatted
     assert ". ." not in formatted
 
@@ -209,3 +210,28 @@ def test_format_math_ocr_text_closes_vendor_inline_math(raw):
 
     assert formatted == r"$x_2>0$。"
     assert formatted.count("$") == 2
+
+
+def test_format_math_ocr_text_repairs_malformed_set_delimiters():
+    formatted = format_math_ocr_text(r"数列\left$\${x_n-y_n\right$\}是等比数列。")
+
+    assert r"$\left\{x_n-y_n\right\}$" in formatted
+    assert r"\left$" not in formatted
+    assert r"\right$" not in formatted
+
+
+def test_format_math_ocr_text_repairs_point_subscripts_and_triangle_vertices():
+    formatted = format_math_ocr_text(
+        r"过点P_n作斜率为k的直线与C的左支点交于点Qn-1，令Pn+1为Q_{n-1}关于y轴的对称点。"
+        r"S_n为\triangle{P_n}{P_n+1}P_{n+2}的面积。"
+    )
+
+    assert "$P_n$" in formatted
+    assert "$Q_{n-1}$" in formatted
+    assert "$P_{n+1}$" in formatted
+    assert r"$\triangle P_nP_{n+1}P_{n+2}$" in formatted
+
+
+def test_format_math_ocr_text_removes_extra_inline_dollar_without_touching_block_math():
+    assert format_math_ocr_text(r"S_n=S_{n+1}$$。") == r"$S_n=S_{n+1}$。"
+    assert format_math_ocr_text(r"$$x^2$$。") == r"$$x^2$$。"
