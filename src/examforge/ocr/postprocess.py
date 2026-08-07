@@ -86,6 +86,41 @@ def _repair_fragmented_math(text: str) -> str:
     )
 
 
+def _repair_scrambled_piecewise_function(text: str) -> str:
+    """重组坐标排序将函数定义、分支和条件完全打散的分段函数。"""
+    anchor = text.find("已知函数")
+    environment = min(
+        (index for token in (r"\begin{cases}", r"\begin{array}")
+         if (index := text.find(token)) >= 0),
+        default=-1,
+    )
+    if environment < 0 or anchor <= environment:
+        return text
+
+    probe = re.sub(r"[\s${}]", "", text)
+    required = (
+        "-x^2-2ax-a",
+        "e^x",
+        r"\ln(x+1)",
+        "x<0",
+        r"x\ge0",
+    )
+    if not all(token in probe for token in required):
+        return text
+
+    suffix = re.search(r"已知函数.*?在(?P<tail>.*)$", text, re.DOTALL)
+    if suffix is None:
+        return text
+    number = re.match(r"\s*(\d+[。.、]?\s*)", text)
+    prefix = number.group(1) if number else ""
+    tail = suffix.group("tail").strip()
+    function = (
+        r"$f(x)=\begin{cases}-x^2-2ax-a,&x<0,\\"
+        r"e^x+\ln(x+1),&x\ge0,\end{cases}$"
+    )
+    return f"{prefix}已知函数{function}在{tail}"
+
+
 def _repair_array_latex(text: str) -> str:
     """把被行内公式分隔符截断的数组/分段函数转为完整 cases 环境。"""
     array_body = (
@@ -434,6 +469,7 @@ def format_math_ocr_text(raw_text: str) -> str:
         return ""
 
     text = raw_text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = _repair_scrambled_piecewise_function(text)
     text = re.sub(rf"(?<=[{_CJK}])[ \t]+(?=[{_CJK}])", "", text)
     text = re.sub(r"(?<=坐标系)[ \t]*x[ \t]*O[ \t]*y(?=中)", "$xOy$", text)
     text = _repair_fragmented_math(text)

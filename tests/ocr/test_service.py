@@ -321,3 +321,21 @@ def test_format_math_ocr_text_repairs_piecewise_function_array():
     assert r"\begin{array}" not in formatted
     assert r"\end{array}" not in formatted
     assert formatted.count("$") % 2 == 0
+
+
+def test_format_math_ocr_text_reassembles_scrambled_piecewise_function():
+    raw = (
+        r"$f \left$t(x)=\begin{cases}- x^2\\ e^x + 1\end{cases}$"
+        "\n"
+        r"$x+\ln(x+1)$, .{}), $x\ge 0$, $-x^2-2ax-a$, $x<0$, "
+        "已知函数$f($在\n$R$上单调递增，则$a$的取值范围是（ ）"
+    )
+
+    formatted = format_math_ocr_text(raw)
+
+    assert formatted == (
+        "已知函数"
+        r"$f(x)=\begin{cases}-x^2-2ax-a,&x<0,\\"
+        r"e^x+\ln(x+1),&x\ge0,\end{cases}$"
+        "在$R$上单调递增，则$a$的取值范围是（ ）"
+    )
