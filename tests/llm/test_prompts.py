@@ -9,7 +9,7 @@ def test_extract_prompt_includes_hint_names():
 
 def test_extract_prompt_handles_no_hint():
     p = extract_user_prompt("stem", None, [], "导数")
-    assert "(无候选)" in p
+    assert "(无)" in p
 
 
 def test_report_prompt_lists_examples():
@@ -35,9 +35,7 @@ def test_answer_prompt_includes_detailed_requirement_and_web_context():
         "stem", "导数", None,
         "[1] 某解析\n摘要: 用分离参数求最值\nURL: https://example.com",
     )
-    assert "全网搜索参考" in p
+    assert "搜索" in p
     assert "某解析" in p
-    assert "详细推导步骤" in p
     assert "Markdown" in p
-    assert "标准 LaTeX" in p
-    assert "审题" in p and "验证" in p
+    assert "LaTeX" in p

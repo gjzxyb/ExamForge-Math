@@ -13,6 +13,13 @@ class MethodRepo:
     def get(self, method_id: int) -> Optional[Method]:
         return self.session.get(Method, method_id)
 
+    def get_many(self, method_ids: list[int]) -> list[Method]:
+        """批量获取方法(优化:单次查询)。"""
+        if not method_ids:
+            return []
+        stmt = select(Method).where(Method.id.in_(method_ids))
+        return list(self.session.exec(stmt))
+
     def find_by_name(self, name: str, area: SubjectArea) -> Optional[Method]:
         return self.session.exec(
             select(Method).where(Method.name == name, Method.subject_area == area)
@@ -33,11 +40,33 @@ class MethodRepo:
         self.session.refresh(method)
         return method
 
+    def add_many(self, methods: list[Method]) -> list[Method]:
+        """批量添加方法(优化:批量提交)。"""
+        if not methods:
+            return []
+        for m in methods:
+            self.session.add(m)
+        self.session.commit()
+        for m in methods:
+            self.session.refresh(m)
+        return methods
+
     def update(self, method: Method) -> Method:
         self.session.add(method)
         self.session.commit()
         self.session.refresh(method)
         return method
+
+    def update_many(self, methods: list[Method]) -> list[Method]:
+        """批量更新方法(优化:批量提交)。"""
+        if not methods:
+            return []
+        for m in methods:
+            self.session.add(m)
+        self.session.commit()
+        for m in methods:
+            self.session.refresh(m)
+        return methods
 
 
 def method_repo() -> MethodRepo:

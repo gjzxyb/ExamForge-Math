@@ -55,11 +55,17 @@ def init_db(data_dir: Path, db_filename: str = "examforge.db") -> Engine:
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / db_filename
     url = f"sqlite:///{db_path}"
-    _engine = create_engine(url, echo=False, future=True)
+    _engine = create_engine(
+        url,
+        echo=False,
+        future=True,
+        pool_pre_ping=True,  # 检测连接是否有效
+        connect_args={"check_same_thread": False},  # SQLite 多线程支持
+    )
     SQLModel.metadata.create_all(_engine)
     _ensure_problem_columns(_engine)
     _ensure_method_columns(_engine)
-    _session = Session(_engine)
+    _session = Session(_engine, expire_on_commit=False)
     return _engine
 
 
@@ -71,8 +77,13 @@ def reset_db_engine_for_tests() -> None:
             _session.close()
         except Exception:
             pass
-    _engine = None
-    _session = None
+        _session = None
+    if _engine is not None:
+        try:
+            _engine.dispose()
+        except Exception:
+            pass
+        _engine = None
 
 
 def get_engine() -> Engine:

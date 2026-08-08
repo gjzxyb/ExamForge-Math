@@ -1,19 +1,18 @@
 """Prompt 模板。集中放这里便于后续 A/B 优化。"""
 
 
-EXTRACT_SYSTEM = """你是高中数学解题方法提炼助手。
-输入是一道题(含可选参考答案)与候选方法清单(来自现有 taxonomy)。
-任务:判断这道题用了哪些方法、关键步骤、可迁移套路、适用特征,并自报置信度。
+EXTRACT_SYSTEM = """高中数学解题方法提炼助手。输入:题目+候选方法清单。
+任务:识别使用的方法、关键步骤、套路、适用特征,输出置信度。
 约束:
-- 输出必须是严格 JSON,不含其它文本。
-- 方法名优先使用候选清单里的名字,除非确无合适者,自拟新名并在 confidence<0.6。
+- 严格 JSON 格式
+- 优先使用候选清单中的方法名,无合适时自拟(confidence<0.6)
 """
 
 
 def apply_model_control(system_prompt: str) -> str:
     """把设置页中的全局模型约束与 Skill 说明注入 system prompt。
 
-    该函数只追加用户在“设置 → 模型约束与 Skills”中保存的 Markdown，
+    该函数只追加用户在"设置 → 模型约束与 Skills"中保存的 Markdown，
     不改变原有任务 JSON schema 约束；若 SettingsStore 未初始化则保持原 prompt。
     """
     try:
@@ -42,27 +41,20 @@ def apply_model_control(system_prompt: str) -> str:
 
 def extract_user_prompt(stem: str, reference: str | None,
                         hint_names: list[str], area: str) -> str:
-    hint = ", ".join(hint_names) if hint_names else "(无候选)"
-    ref = reference or "(无参考答案)"
-    return f"""板块:{area}
-候选方法清单:{hint}
+    hint = ", ".join(hint_names) if hint_names else "(无)"
+    ref = reference or "(无)"
+    return f"""板块:{area} | 候选:{hint}
 
-题干(LaTeX/文本):
-{stem}
+题干:{stem}
 
 参考答案:{ref}
 
-请输出 JSON,字段:
-- summary: 整道题的一句话思路综述
-- methods: 列表,每项含 method_name/subject_area/key_steps/transfer_note/applicability/key_theorem/secondary_theorems/confidence
-- overall_confidence: 整道题整体置信度
-- 若题中存在比常规方法更关键的定理、推论或二级定理,必须写入 key_theorem / secondary_theorems。
-- key_theorem 没有则填空字符串 ""；secondary_theorems 必须始终是数组,没有则填 []，不要填空字符串。
+JSON 字段:summary(思路综述), methods[method_name,subject_area,key_steps,transfer_note,applicability,key_theorem,secondary_theorems,confidence], overall_confidence
+注:key_theorem 空填"", secondary_theorems 空填[]
 """
 
 
-REPORT_SYSTEM = """你是数学教研报告撰写助手,负责把方法知识整理为可读专题报告。
-"""
+REPORT_SYSTEM = """数学教研报告撰写助手,整理方法知识为专题报告。"""
 
 
 def report_user_prompt(name: str, app: str, ci: str, proc: str,
@@ -71,21 +63,15 @@ def report_user_prompt(name: str, app: str, ci: str, proc: str,
         f"- {e.get('year', '?')} {e.get('region', '?')}: {e.get('summary', '')[:60]}"
         for e in examples
     )
-    return f"""方法名:{name}
-适用特征:{app}
-核心思想:{ci}
-通用步骤:{proc}
-常见坑:{pit}
-例题({len(examples)} 道):
-{lines}
+    return f"""方法:{name} | 适用:{app} | 核心:{ci}
+步骤:{proc} | 坑:{pit}
+例题({len(examples)}道):{lines}
 
-请输出 JSON,字段:intro/core_idea/procedure/applicability/pitfalls/examples_markdown(对应例题表)。
+JSON字段:intro,core_idea,procedure,applicability,pitfalls,examples_markdown
 """
 
 
-QA_SYSTEM = """你是解题方法学徒。请仅依据“给定方法知识 + 给定例题 ”作答,不要凭直觉。
-如所给知识不足,明确说明缺失,不要编造。
-"""
+QA_SYSTEM = """解题方法学徒。仅依据给定方法知识+例题作答,不凭直觉。知识不足时明确说明,不编造。"""
 
 
 def qa_user_prompt(question: str, method_doc: str, examples: list[dict]) -> str:
@@ -95,27 +81,22 @@ def qa_user_prompt(question: str, method_doc: str, examples: list[dict]) -> str:
     )
     return f"""问题:{question}
 
-已知方法知识:
-{method_doc}
+方法知识:{method_doc}
 
-已知例题:
-{lines}
+例题:{lines}
 
-输出 JSON:answer/cited_method_names/cited_problem_ids。
+JSON:answer,cited_method_names,cited_problem_ids
 """
 
-ANSWER_SYSTEM = """你是高中数学答案生成助手。
-任务:在录入环节题目缺少答案时,根据题干、可选参考材料与可选全网搜索摘要,生成“答案/最终结果”和足够详细的推导依据。
+ANSWER_SYSTEM = """高中数学答案生成助手。根据题干+参考材料+搜索摘要生成答案与推导。
 要求:
-- answer 字段优先给出最终答案/最终结果,必要时包含 LaTeX,保持简洁明确。
-- answer 和 analysis_steps 中的数学表达必须使用标准 LaTeX:行内公式用 \\( ... \\),重要推导/分段/结论用 $$ ... $$ 独立成行;不要把长公式塞进中文长句。
-- analysis_steps 必须用 Markdown 分节排版,每节之间空一行,建议固定使用这些二级标题:## 审题与条件整理、## 关键转化与公式、## 计算推导、## 结果验证与取舍、## 易错点、## 全网搜索参考。
-- analysis_steps 必须详实,不少于 4 个步骤或等价信息量;每段尽量短,不要输出整段不换行的长文本。
-- analysis_steps 应控制在 3500 个中文字符以内，详实但不重复题干和同义推导；接近输出上限时优先给出结论、验证并闭合 JSON，禁止输出半截字符串或未闭合 JSON。
-- 若提供“全网搜索参考”,只能作为核验和补充思路,不得直接照抄;应在 analysis_steps 末尾简要列出采用/未采用的搜索依据标题。
-- 若题目信息不足,也要给出最可能答案,同时在 analysis_steps 说明缺失信息和假设,并降低 confidence。
-- 不要冒充官方解析;这是系统自动生成的参考答案草稿。
-- 输出必须是严格 JSON,不含其它文本。
+- answer:最终答案(可含 LaTeX),简洁明确
+- 数学公式:行内 \\( ... \\),独立行 $$ ... $$
+- analysis_steps:Markdown 分节(## 审题、## 转化、## 计算、## 验证、## 易错点、## 搜索参考),≤3500字
+- 每段简短,不重复题干,接近上限时优先闭合 JSON
+- 搜索参考仅作核验,不照抄
+- 信息不足时给最可能答案,说明假设并降低 confidence
+- 严格 JSON,无其它文本
 """
 
 
@@ -125,23 +106,15 @@ def answer_user_prompt(
     reference: str | None = None,
     web_context: str | None = None,
 ) -> str:
-    ref = reference or "(无参考材料)"
-    web = web_context or "(未启用或未取得全网搜索参考)"
-    return f"""所属模块:{subject_area}
+    ref = reference or "(无)"
+    web = web_context or "(无)"
+    return f"""模块:{subject_area}
 
-题干(LaTeX/文本):
-{stem}
+题干:{stem}
 
-可选参考材料:
-{ref}
+参考:{ref}
 
-全网搜索参考:
-{web}
+搜索:{web}
 
-请输出 JSON,字段:
-- answer: 答案/最终结果,可含 LaTeX
-- analysis_steps: 3500 个中文字符以内的 Markdown 详细推导步骤,覆盖审题、转化、计算、验证和易错点;数学公式使用标准 LaTeX
-- confidence: 0 到 1 的置信度
-
-严格遵守 system prompt 的格式要求,只返回 JSON 对象,不要附加说明。
+JSON:answer(含LaTeX),analysis_steps(≤3500字Markdown),confidence(0-1)
 """

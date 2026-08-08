@@ -54,10 +54,21 @@ class ProblemRepo:
     def get(self, problem_id: int) -> Optional[Problem]:
         return self.session.get(Problem, problem_id)
 
-    def list_by_area(self, area: SubjectArea, limit: int = 100) -> list[Problem]:
+    def get_many(self, problem_ids: list[int]) -> list[Problem]:
+        """批量获取题目(优化:单次查询)。"""
+        if not problem_ids:
+            return []
+        stmt = select(Problem).where(Problem.id.in_(problem_ids))
+        return list(self.session.exec(stmt))
+
+    def list_by_area(self, area: SubjectArea, limit: int = 100, offset: int = 0) -> list[Problem]:
+        """按板块列出题目,支持分页。"""
         return list(
             self.session.exec(
-                select(Problem).where(Problem.subject_area == area).limit(limit)
+                select(Problem)
+                .where(Problem.subject_area == area)
+                .offset(offset)
+                .limit(limit)
             )
         )
 

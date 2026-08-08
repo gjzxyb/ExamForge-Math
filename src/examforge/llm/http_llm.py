@@ -6,6 +6,7 @@
 
 import json
 import os
+import time
 from typing import Any
 import httpx
 from pydantic import TypeAdapter, ValidationError
@@ -233,105 +234,116 @@ class HttpLLM:
         max_retries_override: int | None = None,
         request_timeout: float | None = None,
     ) -> Any:
+        """统一的 JSON 聊天接口,带自动重试。"""
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
-        # DeepSeek JSON Output requires the prompt to contain the literal word
-        # ``json``. Keep this invariant even when a custom prompt is supplied.
+        # 确保 prompt 包含 "json" 以触发 JSON 模式
         if "json" not in system.lower() and "json" not in user.lower():
             system = system.rstrip() + "\nReturn the result as valid json only."
-        last_err: Exception | None = None
+
         retry_limit = self._max_retries if max_retries_override is None else max_retries_override
         truncation_retries = 0
+
         for attempt in range(retry_limit + 1):
             try:
-                request_max_tokens = None
-                if max_tokens:
-                    request_max_tokens = min(
-                        max_tokens * (TRUNCATION_TOKEN_GROWTH ** truncation_retries),
-                        self._json_output_token_cap(),
-                    )
-                resp = self._client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=headers,
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {
-                                "role": "user",
-                                "content": user + (
-                                    retry_user_suffix if truncation_retries else ""
-                                ),
-                            },
-                        ],
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0.2,
-                        **self._thinking_parameters(thinking_mode_override),
-                        **({"max_tokens": request_max_tokens} if request_max_tokens else {}),
-                    },
-                    **({"timeout": request_timeout} if request_timeout is not None else {}),
+                result = self._single_chat_attempt(
+                    headers, system, user, schema_model,
+                    max_tokens, retry_user_suffix, truncation_retries,
+                    thinking_mode_override, request_timeout
                 )
-                # 4xx/5xx 不抛,手工 raise 以便带 status
-                if resp.status_code >= 400:
-                    raise LLMHttpError(
-                        f"HTTP {resp.status_code} from LLM",
-                        status_code=resp.status_code,
-                        body=resp.text,
-                        request_url=str(resp.request.url),
-                    )
-                payload = self._decode_response(resp, str(resp.request.url))
-                choice = payload["choices"][0]
-                content = choice["message"]["content"]
-                try:
-                    return _validate_llm_json(content, schema_model)
-                except ValidationError as exc:
-                    truncated = _is_truncated_json_error(
-                        exc,
-                        finish_reason=choice.get("finish_reason"),
-                    )
-                    last_err = LLMHttpError(
-                        _json_validation_message(
-                            exc,
-                            finish_reason=choice.get("finish_reason"),
-                            retrying=attempt < retry_limit,
-                        ),
-                        request_url=str(resp.request.url),
-                    )
-                    if attempt < retry_limit:
-                        if truncated:
-                            truncation_retries += 1
-                        import time
-                        time.sleep(2 ** attempt)
-                        continue
-                    raise last_err
+                return result
             except LLMHttpError as e:
-                last_err = e
-                # 4xx(认证、参数错)立即失败,不再 retry
                 if e.status_code and 400 <= e.status_code < 500:
+                    raise  # 4xx 客户端错误不重试
+                if attempt >= retry_limit:
                     raise
-            except (httpx.RequestError, KeyError, IndexError) as e:
-                last_err = e
-                # 连接错也带上 URL。Timeout 单独说明,否则 str(ReadTimeout) 为空时前端只剩 URL。
-                if isinstance(e, httpx.RequestError) and e.request:
-                    if isinstance(e, httpx.TimeoutException):
-                        actual_timeout = request_timeout or self._timeout
-                        detail = str(e) or f"请求超过 {actual_timeout} 秒未返回"
-                        message = f"LLM 请求超时: {detail}"
-                    else:
-                        detail = str(e) or e.__class__.__name__
-                        message = f"无法连接 LLM: {detail}"
-                    last_err = LLMHttpError(
-                        message,
-                        request_url=str(e.request.url),
-                        timeout_seconds=request_timeout or self._timeout,
-                    )
-                if attempt < retry_limit:
-                    import time
+                time.sleep(2 ** attempt)
+            except ValidationError as exc:
+                truncated = _is_truncated_json_error(exc, finish_reason=getattr(exc, '_finish_reason', None))
+                if truncated and attempt < retry_limit:
+                    truncation_retries += 1
                     time.sleep(2 ** attempt)
                     continue
-        # 全部 retry 耗尽
-        if isinstance(last_err, LLMHttpError):
-            raise last_err
-        raise LLMHttpError(f"LLM 调用失败: {last_err}")
+                raise LLMHttpError(
+                    _json_validation_message(exc, finish_reason=getattr(exc, '_finish_reason', None), retrying=False),
+                    request_url=getattr(exc, '_request_url', None),
+                )
+            except (httpx.RequestError, KeyError, IndexError) as e:
+                if attempt >= retry_limit:
+                    self._raise_connection_error(e, request_timeout)
+                time.sleep(2 ** attempt)
+
+        raise LLMHttpError("LLM 调用失败: 超过重试次数")
+
+    def _single_chat_attempt(
+        self, headers: dict, system: str, user: str, schema_model: type,
+        max_tokens: int | None, retry_user_suffix: str, truncation_retries: int,
+        thinking_mode_override: str | None, request_timeout: float | None
+    ) -> Any:
+        """单次聊天尝试。"""
+        request_max_tokens = self._compute_max_tokens(max_tokens, truncation_retries)
+
+        resp = self._client.post(
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user + (retry_user_suffix if truncation_retries else "")},
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+                **self._thinking_parameters(thinking_mode_override),
+                **({"max_tokens": request_max_tokens} if request_max_tokens else {}),
+            },
+            **({"timeout": request_timeout} if request_timeout is not None else {}),
+        )
+
+        if resp.status_code >= 400:
+            raise LLMHttpError(
+                f"HTTP {resp.status_code} from LLM",
+                status_code=resp.status_code,
+                body=resp.text,
+                request_url=str(resp.request.url),
+            )
+
+        payload = self._decode_response(resp, str(resp.request.url))
+        choice = payload["choices"][0]
+        content = choice["message"]["content"]
+
+        try:
+            return _validate_llm_json(content, schema_model)
+        except ValidationError as exc:
+            # 附加上下文信息用于外层处理
+            exc._finish_reason = choice.get("finish_reason")  # type: ignore
+            exc._request_url = str(resp.request.url)  # type: ignore
+            raise
+
+    def _compute_max_tokens(self, max_tokens: int | None, truncation_retries: int) -> int | None:
+        """计算请求的 max_tokens,支持截断重试时增长。"""
+        if not max_tokens:
+            return None
+        return min(
+            max_tokens * (TRUNCATION_TOKEN_GROWTH ** truncation_retries),
+            self._json_output_token_cap(),
+        )
+
+    def _raise_connection_error(self, exc: Exception, request_timeout: float | None) -> None:
+        """将连接错误转换为 LLMHttpError。"""
+        if isinstance(exc, httpx.RequestError) and exc.request:
+            if isinstance(exc, httpx.TimeoutException):
+                actual_timeout = request_timeout or self._timeout
+                detail = str(exc) or f"请求超过 {actual_timeout} 秒未返回"
+                message = f"LLM 请求超时: {detail}"
+            else:
+                detail = str(exc) or exc.__class__.__name__
+                message = f"无法连接 LLM: {detail}"
+            raise LLMHttpError(
+                message,
+                request_url=str(exc.request.url),
+                timeout_seconds=request_timeout or self._timeout,
+            )
+        raise LLMHttpError(f"LLM 调用失败: {exc}")
 
     def probe_connection(self) -> dict[str, bool]:
         """Run one bounded request to verify endpoint, auth, model and JSON mode."""
