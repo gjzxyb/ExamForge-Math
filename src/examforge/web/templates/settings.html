@@ -156,7 +156,7 @@ const providerPresets = {
   openai: { base: "https://api.openai.com/v1", models: ["gpt-5", "gpt-5-mini", "gpt-4.1"] },
   qwen: { base: "https://dashscope.aliyuncs.com/compatible-mode/v1", models: ["qwen-plus", "qwen-max", "qwen3-max"] },
   zhipu: { base: "https://open.bigmodel.cn/api/paas/v4", models: ["glm-4.5", "glm-4.5-air", "glm-4-flash"] },
-  moonshot: { base: "https://api.moonshot.cn/v1", models: ["kimi-k2.5", "moonshot-v1-128k"] },
+  moonspot: { base: "https://api.moonshot.cn/v1", models: ["kimi-k2.5", "moonshot-v1-128k"] },
   custom: { base: "", models: [] }
 };
 function applyProviderPreset(updateFields) {
@@ -171,6 +171,51 @@ function applyProviderPreset(updateFields) {
   if (updateFields && preset.models.length) model.value = preset.models[0];
 }
 applyProviderPreset(false);
+
+// 统一表单提交处理: AJAX 提交并自动跳转
+function setupFormAjax(formId) {
+  var form = document.getElementById(formId);
+  if (!form) return;
+
+  form.addEventListener("submit", function(e) {
+    e.preventDefault();
+    var btn = form.querySelector("button[type='submit'], button:not([type='button'])");
+    var originalText = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "保存中...";
+    }
+
+    var formData = new FormData(form);
+    fetch(form.action, { method: "POST", body: formData })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && data.redirect) {
+          window.location.href = data.redirect;
+        } else {
+          alert("保存失败: " + (data.error || "未知错误"));
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = originalText;
+          }
+        }
+      })
+      .catch(err => {
+        alert("保存失败: " + err);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+      });
+  });
+}
+
+// 绑定所有设置表单
+setupFormAjax("form-llm");
+setupFormAjax("form-model-control");
+setupFormAjax("form-embedder");
+setupFormAjax("form-web-search");
+setupFormAjax("form-ocr");
 
 function testConn(label, url, resultId) {
   var el = document.getElementById(resultId);
